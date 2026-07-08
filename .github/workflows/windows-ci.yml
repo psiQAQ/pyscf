@@ -6,7 +6,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  windows-wheel:
+  windows-wheel-pr:
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: windows-latest
     timeout-minutes: 90
     permissions:
@@ -67,7 +68,75 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: windows-ci-artifacts
+          name: windows-ci-pr-artifacts
+          if-no-files-found: warn
+          path: |
+            dist/*.whl
+            tools/windows/build-logs/**
+            tools/windows/reports/**
+
+  windows-wheel-full:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      BUILD_ENV_NAME: pyscf-win313
+      TEST_ENV_NAME: pyscf-win313-test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Conda
+        uses: conda-incubator/setup-miniconda@v4
+        with:
+          activate-environment: ""
+          auto-activate: false
+          auto-update-conda: false
+
+      - name: Set up MSYS2 UCRT64
+        id: msys2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-openblas
+
+      - name: Create build environment
+        run: conda env create --file tools/windows/environment.yml
+
+      - name: Build Windows wheel
+        run: >
+          conda run --no-capture-output -n $env:BUILD_ENV_NAME
+          powershell -ExecutionPolicy Bypass -File tools/windows/build-wheel.ps1
+          -Clean
+          -RuntimeDllDir "${{ steps.msys2.outputs.msys2-location }}\\ucrt64\\bin"
+
+      - name: Create test environment
+        run: conda env create --file tools/windows/environment-test.yml
+
+      - name: Install test-only dependencies
+        run: >
+          conda run --no-capture-output -n $env:TEST_ENV_NAME
+          python -m pip install -r tools/windows/requirements-test.txt
+
+      - name: Verify installed wheel full sweep
+        run: >
+          conda run --no-capture-output -n $env:TEST_ENV_NAME
+          powershell -ExecutionPolicy Bypass -File tools/windows/verify-installed-wheel.ps1
+          -SkipBuild
+          -RuntimeDllDir "${{ steps.msys2.outputs.msys2-location }}\\ucrt64\\bin"
+
+      - name: Upload Windows artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-ci-full-artifacts
           if-no-files-found: warn
           path: |
             dist/*.whl
