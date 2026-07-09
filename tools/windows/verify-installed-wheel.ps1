@@ -164,6 +164,37 @@ function Write-PytestConfig {
     return $pytestIni
 }
 
+function Write-PytestDeselectPlugin {
+    param(
+        [string]$RunRoot
+    )
+
+    $pluginPath = Join-Path $RunRoot "conftest.py"
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllLines($pluginPath, @(
+        'import json',
+        'import os',
+        '',
+        '_DESELECT = [item.replace("\\", "/") for item in json.loads(os.environ.get("PYSCF_DESELECT_NODEIDS", "[]"))]',
+        '',
+        'def pytest_collection_modifyitems(config, items):',
+        '    if not _DESELECT:',
+        '        return',
+        '    kept = []',
+        '    deselected = []',
+        '    for item in items:',
+        '        nodeid = item.nodeid.replace("\\", "/")',
+        '        if any(nodeid == candidate or nodeid.endswith(candidate) for candidate in _DESELECT):',
+        '            deselected.append(item)',
+        '        else:',
+        '            kept.append(item)',
+        '    if deselected:',
+        '        config.hook.pytest_deselected(items=deselected)',
+        '        items[:] = kept'
+    ), $utf8NoBom)
+    return $pluginPath
+}
+
 function Expand-PathArguments {
     param(
         [string]$RepoRoot,
@@ -537,7 +568,7 @@ function Invoke-PytestTargets {
     param(
         [string]$PythonExe,
         [string[]]$Targets,
-        [string[]]$DeselectTargets,
+        [string[]]$DeselectNodeIds,
         [string]$PytestIni,
         [string]$LogPath
     )
@@ -550,10 +581,24 @@ function Invoke-PytestTargets {
         "-q"
     )
     $argumentList += $Targets
-    foreach ($deselectTarget in $DeselectTargets) {
-        $argumentList += @("--deselect", $deselectTarget)
+    $savedDeselectNodeIds = $env:PYSCF_DESELECT_NODEIDS
+    if ($DeselectNodeIds.Count -gt 0) {
+        $env:PYSCF_DESELECT_NODEIDS = ConvertTo-Json -Compress -InputObject @($DeselectNodeIds)
     }
-    $result = Invoke-ExternalCommandCapture -FilePath $PythonExe -ArgumentList $argumentList
+    else {
+        Remove-Item Env:PYSCF_DESELECT_NODEIDS -ErrorAction SilentlyContinue
+    }
+    try {
+        $result = Invoke-ExternalCommandCapture -FilePath $PythonExe -ArgumentList $argumentList
+    }
+    finally {
+        if ($null -ne $savedDeselectNodeIds) {
+            $env:PYSCF_DESELECT_NODEIDS = $savedDeselectNodeIds
+        }
+        else {
+            Remove-Item Env:PYSCF_DESELECT_NODEIDS -ErrorAction SilentlyContinue
+        }
+    }
     $timer.Stop()
     $result.AllOutput | Set-Content -Path $LogPath -Encoding UTF8
     $pytestSummary = Get-PytestSummary -OutputLines $result.AllOutput
@@ -753,6 +798,7 @@ try {
     New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
     Initialize-RunRoot -RunRoot $RunRoot
     $pytestIni = Write-PytestConfig -RunRoot $RunRoot
+    Write-PytestDeselectPlugin -RunRoot $RunRoot | Out-Null
 
     $env:OMP_NUM_THREADS = "4"
     $savedPythonPath = $env:PYTHONPATH
@@ -793,7 +839,7 @@ print(json.dumps({"env_name": env_name, "packages": packages}, ensure_ascii=Fals
             $staged = Stage-TestDirectory -SourceDirectory $runItem.source_directory -RunRoot $RunRoot -RepoRoot $RepoRoot
             $logicalTarget = $staged.logical_directory
             $pytestTargets = @($staged.staged_directory)
-            $deselectTargets = @()
+            $deselectNodeIds = @()
             $logLabel = $staged.logical_directory
 
             if ($runItem.nodeids.Count -gt 0) {
@@ -812,15 +858,10 @@ print(json.dumps({"env_name": env_name, "packages": packages}, ensure_ascii=Fals
                 }
             }
             elseif ($excludeNodeTable.ContainsKey($runItem.source_directory)) {
-                $deselectTargets = @(
+                $deselectNodeIds = @(
                     foreach ($nodeid in $excludeNodeTable[$runItem.source_directory]) {
                         $stagedFile = Join-Path $staged.staged_directory $nodeid.relative_file
-                        $absoluteNodeId = $stagedFile + $nodeid.suffix
-                        $relativeNodeId = (Get-RelativePath -BasePath $RunRoot -TargetPath $stagedFile) + $nodeid.suffix
-                        $absoluteNodeId
-                        if ($relativeNodeId -ne $absoluteNodeId) {
-                            $relativeNodeId
-                        }
+                        ((Get-RelativePath -BasePath $RunRoot -TargetPath $stagedFile) + $nodeid.suffix).Replace('\', '/')
                     }
                 )
             }
@@ -830,7 +871,7 @@ print(json.dumps({"env_name": env_name, "packages": packages}, ensure_ascii=Fals
             $pytestResult = Invoke-PytestTargets `
                 -PythonExe $PythonExe `
                 -Targets $pytestTargets `
-                -DeselectTargets $deselectTargets `
+                -DeselectNodeIds $deselectNodeIds `
                 -PytestIni $pytestIni `
                 -LogPath $logPath
             $results += [pscustomobject]@{

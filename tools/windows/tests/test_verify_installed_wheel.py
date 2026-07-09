@@ -61,6 +61,9 @@ class VerifyInstalledWheelScriptTests(unittest.TestCase):
         self.assertNotIn('.Split("::", 2', text)
         self.assertIn('Join-Path $staged.staged_directory $nodeid.relative_file', text)
         self.assertIn('Get-RelativePath -BasePath $RunRoot -TargetPath $stagedFile', text)
+        self.assertIn("function Write-PytestDeselectPlugin", text)
+        self.assertIn("PYSCF_DESELECT_NODEIDS", text)
+        self.assertIn("pytest_collection_modifyitems", text)
 
     def test_script_installs_latest_wheel_and_writes_reports(self):
         text = VERIFY_WHEEL.read_text(encoding="utf-8")
