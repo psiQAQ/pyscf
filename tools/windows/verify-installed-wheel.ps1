@@ -814,7 +814,13 @@ print(json.dumps({"env_name": env_name, "packages": packages}, ensure_ascii=Fals
             elseif ($excludeNodeTable.ContainsKey($runItem.source_directory)) {
                 $deselectTargets = @(
                     foreach ($nodeid in $excludeNodeTable[$runItem.source_directory]) {
-                        (Join-Path $staged.staged_directory $nodeid.relative_file) + $nodeid.suffix
+                        $stagedFile = Join-Path $staged.staged_directory $nodeid.relative_file
+                        $absoluteNodeId = $stagedFile + $nodeid.suffix
+                        $relativeNodeId = (Get-RelativePath -BasePath $RunRoot -TargetPath $stagedFile) + $nodeid.suffix
+                        $absoluteNodeId
+                        if ($relativeNodeId -ne $absoluteNodeId) {
+                            $relativeNodeId
+                        }
                     }
                 )
             }
