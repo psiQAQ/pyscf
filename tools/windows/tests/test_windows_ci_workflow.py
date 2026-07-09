@@ -44,8 +44,11 @@ class WindowsCIWorkflowTests(unittest.TestCase):
         self.assertIn("run_tests.ps1", wrapper)
         self.assertIn("tools/windows/verify-installed-wheel.ps1", helper)
         self.assertIn("-PytestNodeIds", helper)
+        self.assertIn("-ExcludePytestNodeIds", helper)
         self.assertIn("test_eom_gccsd.py::KnownValues::test_ipccsd", helper)
         self.assertIn("test_eom_gccsd.py::KnownValues::test_eaccsd", helper)
+        self.assertIn("test_dhf_slow.py::KnownValues::test_kernel", helper)
+        self.assertIn("test_bz.py::KnownValues::test_mc1step_4o4e", helper)
         self.assertIn("test_rks.py::Diamond::test_hse06_tda", helper)
         self.assertIn("test_tduks.py::KnownValues::test_tddft_camb3lyp", helper)
 

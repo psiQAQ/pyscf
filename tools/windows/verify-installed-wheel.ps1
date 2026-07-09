@@ -5,6 +5,7 @@ param(
     [string]$ReportDir = "",
     [string[]]$TestRoots = @(),
     [string[]]$PytestNodeIds = @(),
+    [string[]]$ExcludePytestNodeIds = @(),
     [string[]]$ExcludeTestRoots = @(),
     [switch]$SkipBuild,
     [switch]$SkipInstall,
@@ -304,10 +305,17 @@ function Get-TestDirectories {
 function Split-PytestNodeId {
     param([string]$NodeId)
 
-    $parts = $NodeId.Split("::", 2, [System.StringSplitOptions]::None)
+    $separatorIndex = $NodeId.IndexOf("::", [System.StringComparison]::Ordinal)
+    if ($separatorIndex -lt 0) {
+        return [pscustomobject]@{
+            path_part = $NodeId
+            suffix = ""
+        }
+    }
+
     return [pscustomobject]@{
-        path_part = $parts[0]
-        suffix = if ($parts.Count -gt 1) { "::" + $parts[1] } else { "" }
+        path_part = $NodeId.Substring(0, $separatorIndex)
+        suffix = $NodeId.Substring($separatorIndex)
     }
 }
 
@@ -360,6 +368,19 @@ function Get-PytestNodeGroups {
                 nodeids = @($_.Value)
             }
         }
+}
+
+function Get-PytestNodeGroupTable {
+    param(
+        [string]$RepoRoot,
+        [string[]]$ConfiguredNodeIds
+    )
+
+    $table = @{}
+    foreach ($group in (Get-PytestNodeGroups -RepoRoot $RepoRoot -ConfiguredNodeIds $ConfiguredNodeIds)) {
+        $table[$group.source_directory] = @($group.nodeids)
+    }
+    return $table
 }
 
 function Invoke-BuildWheel {
@@ -516,6 +537,7 @@ function Invoke-PytestTargets {
     param(
         [string]$PythonExe,
         [string[]]$Targets,
+        [string[]]$DeselectTargets,
         [string]$PytestIni,
         [string]$LogPath
     )
@@ -528,6 +550,9 @@ function Invoke-PytestTargets {
         "-q"
     )
     $argumentList += $Targets
+    foreach ($deselectTarget in $DeselectTargets) {
+        $argumentList += @("--deselect", $deselectTarget)
+    }
     $result = Invoke-ExternalCommandCapture -FilePath $PythonExe -ArgumentList $argumentList
     $timer.Stop()
     $result.AllOutput | Set-Content -Path $LogPath -Encoding UTF8
@@ -698,7 +723,12 @@ try {
 
     $pytestVersion = Ensure-Pytest -PythonExe $PythonExe
     $PytestNodeIds = @(Expand-DelimitedArguments -Values $PytestNodeIds)
+    $ExcludePytestNodeIds = @(Expand-DelimitedArguments -Values $ExcludePytestNodeIds)
     $runItems = @()
+    $excludeNodeTable = @{}
+    if ($ExcludePytestNodeIds.Count -gt 0) {
+        $excludeNodeTable = Get-PytestNodeGroupTable -RepoRoot $RepoRoot -ConfiguredNodeIds $ExcludePytestNodeIds
+    }
     if ($PytestNodeIds.Count -gt 0) {
         $runItems = @(Get-PytestNodeGroups -RepoRoot $RepoRoot -ConfiguredNodeIds $PytestNodeIds)
     }
@@ -763,6 +793,7 @@ print(json.dumps({"env_name": env_name, "packages": packages}, ensure_ascii=Fals
             $staged = Stage-TestDirectory -SourceDirectory $runItem.source_directory -RunRoot $RunRoot -RepoRoot $RepoRoot
             $logicalTarget = $staged.logical_directory
             $pytestTargets = @($staged.staged_directory)
+            $deselectTargets = @()
             $logLabel = $staged.logical_directory
 
             if ($runItem.nodeids.Count -gt 0) {
@@ -780,12 +811,20 @@ print(json.dumps({"env_name": env_name, "packages": packages}, ensure_ascii=Fals
                     $logLabel = $logicalTarget
                 }
             }
+            elseif ($excludeNodeTable.ContainsKey($runItem.source_directory)) {
+                $deselectTargets = @(
+                    foreach ($nodeid in $excludeNodeTable[$runItem.source_directory]) {
+                        (Join-Path $staged.staged_directory $nodeid.relative_file) + $nodeid.suffix
+                    }
+                )
+            }
 
             $logName = (Sanitize-Name $logLabel) + ".log"
             $logPath = Join-Path $logsDir $logName
             $pytestResult = Invoke-PytestTargets `
                 -PythonExe $PythonExe `
                 -Targets $pytestTargets `
+                -DeselectTargets $deselectTargets `
                 -PytestIni $pytestIni `
                 -LogPath $logPath
             $results += [pscustomobject]@{

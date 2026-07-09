@@ -54,8 +54,11 @@ class VerifyInstalledWheelScriptTests(unittest.TestCase):
         self.assertIn("Copy-Item -Path (Join-Path $SourceDirectory '*')", text)
         self.assertIn("Join-Path $RunRoot \"tests\"", text)
         self.assertIn("[string[]]$PytestNodeIds", text)
+        self.assertIn("[string[]]$ExcludePytestNodeIds", text)
         self.assertIn("function Split-PytestNodeId", text)
         self.assertIn("function Get-PytestNodeGroups", text)
+        self.assertIn('IndexOf("::"', text)
+        self.assertNotIn('.Split("::", 2', text)
         self.assertIn('Join-Path $staged.staged_directory $nodeid.relative_file', text)
 
     def test_script_installs_latest_wheel_and_writes_reports(self):
@@ -89,8 +92,10 @@ class VerifyInstalledWheelScriptTests(unittest.TestCase):
     def test_script_supports_optional_test_exclusions(self):
         text = VERIFY_WHEEL.read_text(encoding="utf-8")
         self.assertIn("[string[]]$ExcludeTestRoots", text)
+        self.assertIn("[string[]]$ExcludePytestNodeIds", text)
         self.assertIn("[switch]$SkipPbc", text)
         self.assertIn("ExcludeTestRoots", text)
+        self.assertIn("ExcludePytestNodeIds", text)
         self.assertIn("SkipPbc", text)
         self.assertIn('Join-Path $RepoRoot "pyscf\\pbc"', text)
 

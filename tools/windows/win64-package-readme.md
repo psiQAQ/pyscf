@@ -124,6 +124,7 @@ Useful `verify-installed-wheel.ps1` parameters:
 - `-TestRoots <paths...>`: only run the listed test directories or module roots. When invoking the script through `powershell -File`, use comma-separated values, for example `-TestRoots 'pyscf\gto\test','pyscf\scf\test'`
 - `-ExcludeTestRoots <paths...>`: exclude one or more directories or subtrees from the discovered test set, for example `-ExcludeTestRoots pyscf\pbc`
 - `-PytestNodeIds <nodeids...>`: run a file-level or test-level subset such as `pyscf/cc/test/test_eom_gccsd.py::KnownValues::test_ipccsd` while still importing `pyscf` from the installed wheel in the clean test environment
+- `-ExcludePytestNodeIds <nodeids...>`: deselect individual file-level or test-level targets from an otherwise broader directory run, for example `pyscf/fci/test/test_dhf_slow.py::KnownValues::test_kernel`
 - `-SkipPbc`: shorthand to exclude the entire `pyscf\pbc` subtree while leaving the rest of the repository unchanged
 - `-SkipBuild`: reuse the newest existing wheel under `dist\`
 - `-SkipInstall`: skip reinstalling the wheel into the active test environment

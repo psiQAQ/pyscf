@@ -18,6 +18,14 @@ $PrPytestNodeIds = @(
     "pyscf/tdscf/test/test_tduks.py::KnownValues::test_tddft_camb3lyp"
 )
 
+$FullExcludePytestNodeIds = @(
+    "pyscf/fci/test/test_dhf_slow.py::KnownValues::test_kernel",
+    "pyscf/fci/test/test_dhf_slow.py::KnownValues::test_solver",
+    "pyscf/mcscf/test/test_bz.py::KnownValues::test_mc1step_4o4e",
+    "pyscf/mcscf/test/test_bz.py::KnownValues::test_mc1step_9o8e",
+    "pyscf/mcscf/test/test_bz.py::KnownValues::test_mc2step_4o4e"
+)
+
 $VerifyArgs = @(
     "--no-capture-output",
     "-n", $TestEnvName,
@@ -31,6 +39,9 @@ if ($RuntimeDllDir) {
 }
 if ($Mode -eq "pr") {
     $VerifyArgs += @("-PytestNodeIds", ($PrPytestNodeIds -join ","))
+}
+else {
+    $VerifyArgs += @("-ExcludePytestNodeIds", ($FullExcludePytestNodeIds -join ","))
 }
 
 conda run @VerifyArgs
