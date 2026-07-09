@@ -109,6 +109,7 @@ Notes:
 - Each source `test` directory is first copied into a temporary run directory under `%TEMP%\pyscf-installed-wheel-<timestamp>` before pytest is invoked.
 - The staged directories are written under `%TEMP%\pyscf-installed-wheel-<timestamp>\tests\...` with sanitized names such as `pyscf__gto__test`, rather than recreating a top-level importable `pyscf` package in the temp root.
 - This staging step keeps the test code from the repository, while `import pyscf` still resolves to the already-installed wheel in the active `pyscf-win313-test` environment rather than the local source checkout.
+- Any failed verification target now makes `verify-installed-wheel.ps1` exit non-zero after the reports are written, so GitHub Actions marks the Windows CI job as failed in the same way as the Linux/macOS CI jobs.
 - Unlike the upstream CI, this Windows flow is not a source-tree pytest run. The upstream Linux/macOS CI builds from the checkout and then runs source-tree pytest with the repository root on `PYTHONPATH`, while `verify-installed-wheel.ps1` clears `PYTHONPATH`, changes into the temp run root, and validates the installed wheel from `site-packages`.
 - Copying the tests into a more complete `pyscf\...\test` package layout inside the temp root is possible, but if that temp tree becomes importable as `pyscf`, the run stops being a clean installed-wheel check and starts drifting toward a source-layout test. For that reason, the current staging keeps only the test directories and avoids materializing a top-level `pyscf` package in the run root.
 - The script writes both reports below by default, and also archives timestamped copies such as `installed-wheel-report-YYYYMMDD-HHMMSS.md` and `installed-wheel-report-YYYYMMDD-HHMMSS.json`:
@@ -116,12 +117,13 @@ Notes:
   - `tools/windows/reports/installed-wheel-report.json`
 - Per-directory raw pytest logs are stored under `tools/windows/reports/logs/`.
 - Verification time is approximately 46 minutes on a i5-13600KF.
-- A recent full Windows run finished with two known failures, `pyscf\cc\test` and `pyscf\pbc\tdscf\test`, which currently look like numerical or platform-specific deviations rather than wheel packaging defects.
+- The GitHub Actions PR-grade Windows CI now uses a smaller installed-wheel subset based on currently sensitive tests discussed in `pyscf/pyscf#3245`, while the `workflow_dispatch` full Windows CI still runs the complete installed-wheel sweep.
 
 Useful `verify-installed-wheel.ps1` parameters:
 
 - `-TestRoots <paths...>`: only run the listed test directories or module roots. When invoking the script through `powershell -File`, use comma-separated values, for example `-TestRoots 'pyscf\gto\test','pyscf\scf\test'`
 - `-ExcludeTestRoots <paths...>`: exclude one or more directories or subtrees from the discovered test set, for example `-ExcludeTestRoots pyscf\pbc`
+- `-PytestNodeIds <nodeids...>`: run a file-level or test-level subset such as `pyscf/cc/test/test_eom_gccsd.py::KnownValues::test_ipccsd` while still importing `pyscf` from the installed wheel in the clean test environment
 - `-SkipPbc`: shorthand to exclude the entire `pyscf\pbc` subtree while leaving the rest of the repository unchanged
 - `-SkipBuild`: reuse the newest existing wheel under `dist\`
 - `-SkipInstall`: skip reinstalling the wheel into the active test environment
@@ -148,6 +150,13 @@ powershell -ExecutionPolicy Bypass -File .\tools\windows\verify-installed-wheel.
 powershell -ExecutionPolicy Bypass -File .\tools\windows\verify-installed-wheel.ps1 `
   -SkipBuild `
   -ExcludeTestRoots pyscf\pbc pyscf\solvent
+
+# Run only selected pytest nodeids against the installed wheel
+powershell -ExecutionPolicy Bypass -File .\tools\windows\verify-installed-wheel.ps1 `
+  -SkipBuild `
+  -PytestNodeIds `
+    'pyscf/cc/test/test_eom_gccsd.py::KnownValues::test_ipccsd',`
+    'pyscf/pbc/tdscf/test/test_rks.py::Diamond::test_hse06_tda'
 ```
 
 ## Post-Verification Cleanup

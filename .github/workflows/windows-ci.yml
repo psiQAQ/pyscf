@@ -38,31 +38,13 @@ jobs:
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-openblas
 
-      - name: Create build environment
-        run: conda env create --file tools/windows/environment.yml
-
-      - name: Build Windows wheel
+      - name: Run Windows PR CI
         run: >
-          conda run --no-capture-output -n $env:BUILD_ENV_NAME
-          powershell -ExecutionPolicy Bypass -File tools/windows/build-wheel.ps1
-          -Clean
+          .\.github\workflows\run_ci_windows.ps1
+          -Mode pr
+          -BuildEnvName $env:BUILD_ENV_NAME
+          -TestEnvName $env:TEST_ENV_NAME
           -RuntimeDllDir "${{ steps.msys2.outputs.msys2-location }}\\ucrt64\\bin"
-
-      - name: Create test environment
-        run: conda env create --file tools/windows/environment-test.yml
-
-      - name: Install test-only dependencies
-        run: >
-          conda run --no-capture-output -n $env:TEST_ENV_NAME
-          python -m pip install -r tools/windows/requirements-test.txt
-
-      - name: Verify installed wheel subset
-        run: >
-          conda run --no-capture-output -n $env:TEST_ENV_NAME
-          powershell -ExecutionPolicy Bypass -File tools/windows/verify-installed-wheel.ps1
-          -SkipBuild
-          -RuntimeDllDir "${{ steps.msys2.outputs.msys2-location }}\\ucrt64\\bin"
-          -TestRoots 'pyscf\gto\test','pyscf\scf\test'
 
       - name: Upload Windows artifacts
         if: always()
@@ -107,29 +89,12 @@ jobs:
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-openblas
 
-      - name: Create build environment
-        run: conda env create --file tools/windows/environment.yml
-
-      - name: Build Windows wheel
+      - name: Run Windows full CI
         run: >
-          conda run --no-capture-output -n $env:BUILD_ENV_NAME
-          powershell -ExecutionPolicy Bypass -File tools/windows/build-wheel.ps1
-          -Clean
-          -RuntimeDllDir "${{ steps.msys2.outputs.msys2-location }}\\ucrt64\\bin"
-
-      - name: Create test environment
-        run: conda env create --file tools/windows/environment-test.yml
-
-      - name: Install test-only dependencies
-        run: >
-          conda run --no-capture-output -n $env:TEST_ENV_NAME
-          python -m pip install -r tools/windows/requirements-test.txt
-
-      - name: Verify installed wheel full sweep
-        run: >
-          conda run --no-capture-output -n $env:TEST_ENV_NAME
-          powershell -ExecutionPolicy Bypass -File tools/windows/verify-installed-wheel.ps1
-          -SkipBuild
+          .\.github\workflows\run_ci_windows.ps1
+          -Mode full
+          -BuildEnvName $env:BUILD_ENV_NAME
+          -TestEnvName $env:TEST_ENV_NAME
           -RuntimeDllDir "${{ steps.msys2.outputs.msys2-location }}\\ucrt64\\bin"
 
       - name: Upload Windows artifacts

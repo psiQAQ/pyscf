@@ -4,6 +4,7 @@ param(
     [string]$RepoRoot = "",
     [string]$ReportDir = "",
     [string[]]$TestRoots = @(),
+    [string[]]$PytestNodeIds = @(),
     [string[]]$ExcludeTestRoots = @(),
     [switch]$SkipBuild,
     [switch]$SkipInstall,
@@ -196,6 +197,24 @@ function Expand-PathArguments {
     return @($expanded)
 }
 
+function Expand-DelimitedArguments {
+    param([string[]]$Values)
+
+    $expanded = New-Object System.Collections.Generic.List[string]
+    foreach ($value in $Values) {
+        if (-not $value) {
+            continue
+        }
+        foreach ($part in $value.Split(',')) {
+            $trimmed = $part.Trim()
+            if ($trimmed) {
+                $expanded.Add($trimmed)
+            }
+        }
+    }
+    return @($expanded)
+}
+
 function Resolve-PathList {
     param(
         [string]$RepoRoot,
@@ -280,6 +299,67 @@ function Get-TestDirectories {
     }
 
     return $testDirs | Sort-Object -Unique
+}
+
+function Split-PytestNodeId {
+    param([string]$NodeId)
+
+    $parts = $NodeId.Split("::", 2, [System.StringSplitOptions]::None)
+    return [pscustomobject]@{
+        path_part = $parts[0]
+        suffix = if ($parts.Count -gt 1) { "::" + $parts[1] } else { "" }
+    }
+}
+
+function Get-PytestNodeGroups {
+    param(
+        [string]$RepoRoot,
+        [string[]]$ConfiguredNodeIds
+    )
+
+    $normalizedNodeIds = Expand-DelimitedArguments -Values $ConfiguredNodeIds
+    $groupTable = @{}
+
+    foreach ($configuredNodeId in $normalizedNodeIds) {
+        $parsed = Split-PytestNodeId -NodeId $configuredNodeId
+        $sourcePath = if ([System.IO.Path]::IsPathRooted($parsed.path_part)) {
+            (Resolve-Path $parsed.path_part).Path
+        }
+        else {
+            (Resolve-Path (Join-Path $RepoRoot $parsed.path_part)).Path
+        }
+
+        if (-not (Test-Path $sourcePath -PathType Leaf)) {
+            throw "PytestNodeId must reference a test file: $configuredNodeId"
+        }
+
+        $sourceDirectory = Split-Path $sourcePath -Parent
+        if ((Split-Path $sourceDirectory -Leaf) -ne "test") {
+            throw "PytestNodeId must point to a file inside a test directory: $configuredNodeId"
+        }
+
+        if (-not $groupTable.ContainsKey($sourceDirectory)) {
+            $groupTable[$sourceDirectory] = New-Object System.Collections.Generic.List[object]
+        }
+
+        $logicalPath = Get-LogicalPath -RepoRoot $RepoRoot -TargetPath $sourcePath
+        $relativeFile = Get-RelativePath -BasePath $sourceDirectory -TargetPath $sourcePath
+        $groupTable[$sourceDirectory].Add([pscustomobject]@{
+            configured_nodeid = $configuredNodeId
+            logical_nodeid = $logicalPath + $parsed.suffix
+            relative_file = $relativeFile
+            suffix = $parsed.suffix
+        })
+    }
+
+    return $groupTable.GetEnumerator() |
+        Sort-Object Name |
+        ForEach-Object {
+            [pscustomobject]@{
+                source_directory = $_.Key
+                nodeids = @($_.Value)
+            }
+        }
 }
 
 function Invoke-BuildWheel {
@@ -432,27 +512,27 @@ function Get-PytestSummary {
     }
 }
 
-function Invoke-PytestDirectory {
+function Invoke-PytestTargets {
     param(
         [string]$PythonExe,
-        [string]$Directory,
+        [string[]]$Targets,
         [string]$PytestIni,
         [string]$LogPath
     )
     $timer = [System.Diagnostics.Stopwatch]::StartNew()
-    $result = Invoke-ExternalCommandCapture -FilePath $PythonExe -ArgumentList @(
+    $argumentList = @(
         "-m",
         "pytest",
-        $Directory,
         "-c",
         $PytestIni,
         "-q"
     )
+    $argumentList += $Targets
+    $result = Invoke-ExternalCommandCapture -FilePath $PythonExe -ArgumentList $argumentList
     $timer.Stop()
     $result.AllOutput | Set-Content -Path $LogPath -Encoding UTF8
     $pytestSummary = Get-PytestSummary -OutputLines $result.AllOutput
     return [pscustomobject]@{
-        directory = $Directory
         exit_code = $result.ExitCode
         duration_seconds = [math]::Round($timer.Elapsed.TotalSeconds, 3)
         log_path = $LogPath
@@ -492,7 +572,7 @@ function Write-FailureSummary {
     }
 
     Write-Host ""
-    Write-Host ("Failed test directories: {0}" -f $failed.Count)
+    Write-Host ("Failed verification targets: {0}" -f $failed.Count)
     foreach ($result in $failed) {
         $resolvedLogPath = if (Test-Path $result.log_path) {
             (Resolve-Path $result.log_path).Path
@@ -500,10 +580,9 @@ function Write-FailureSummary {
         else {
             [System.IO.Path]::GetFullPath($result.log_path)
         }
-        $logicalDirectory = Get-LogicalPath -RepoRoot $RepoRoot -TargetPath $result.directory
-        Write-Host ("- {0} | Log: {1}" -f $logicalDirectory, $resolvedLogPath)
+        Write-Host ("- {0} | Log: {1}" -f $result.logical_target, $resolvedLogPath)
     }
-    Write-Host "Verification completed with failed directories. See installed-wheel-report.md for details."
+    Write-Host "Verification completed with failed targets. See installed-wheel-report.md for details."
 }
 
 function Write-Reports {
@@ -548,6 +627,7 @@ function Write-Reports {
                     directory = $result.directory
                     staged_directory = $result.staged_directory
                     relative_directory = Get-LogicalPath -RepoRoot $RepoRoot -TargetPath $result.directory
+                    logical_target = $result.logical_target
                     exit_code = $result.exit_code
                     duration_seconds = $result.duration_seconds
                     log_path = $result.log_path
@@ -584,13 +664,13 @@ function Write-Reports {
         $lines.Add("- $($property.Name)==$($property.Value)")
     }
     $lines.Add("")
-    $lines.Add("## Per-Directory Results")
+    $lines.Add("## Per-Target Results")
     $lines.Add("")
-    $lines.Add("| Directory | Status | Seconds | Pytest Summary | Log |")
+    $lines.Add("| Target | Status | Seconds | Pytest Summary | Log |")
     $lines.Add("| --- | --- | ---: | --- | --- |")
     foreach ($result in $summary.results) {
         $pytestSummary = if ($result.pytest_summary) { $result.pytest_summary } else { "(no pytest summary captured)" }
-        $lines.Add("| $($result.relative_directory) | $($result.status) | $($result.duration_seconds) | $pytestSummary | $($result.relative_log_path) |")
+        $lines.Add("| $($result.logical_target) | $($result.status) | $($result.duration_seconds) | $pytestSummary | $($result.relative_log_path) |")
     }
     $lines | Set-Content -Path $mdPath -Encoding UTF8
     $lines | Set-Content -Path $datedMdPath -Encoding UTF8
@@ -617,9 +697,25 @@ try {
     }
 
     $pytestVersion = Ensure-Pytest -PythonExe $PythonExe
-    $testDirs = @(Get-TestDirectories -RepoRoot $RepoRoot -ConfiguredRoots $TestRoots -ExcludedRoots $ExcludeTestRoots -SkipPbc:$SkipPbc)
-    if ($testDirs.Count -eq 0) {
-        throw "No test directories were found under pyscf/."
+    $PytestNodeIds = @(Expand-DelimitedArguments -Values $PytestNodeIds)
+    $runItems = @()
+    if ($PytestNodeIds.Count -gt 0) {
+        $runItems = @(Get-PytestNodeGroups -RepoRoot $RepoRoot -ConfiguredNodeIds $PytestNodeIds)
+    }
+    else {
+        $testDirs = @(Get-TestDirectories -RepoRoot $RepoRoot -ConfiguredRoots $TestRoots -ExcludedRoots $ExcludeTestRoots -SkipPbc:$SkipPbc)
+        $runItems = @(
+            foreach ($testDir in $testDirs) {
+                [pscustomobject]@{
+                    source_directory = $testDir
+                    nodeids = @()
+                }
+            }
+        )
+    }
+
+    if ($runItems.Count -eq 0) {
+        throw "No verification targets were found under pyscf/."
     }
 
     $RunRoot = New-RunRoot
@@ -661,20 +757,41 @@ print(json.dumps({"env_name": env_name, "packages": packages}, ensure_ascii=Fals
         }
         $importInfo = ($importResult.AllOutput | Select-Object -Last 1 | ConvertFrom-Json)
 
-        $totalTests = $testDirs.Count
+        $totalTests = $runItems.Count
         $completedCount = 0
-        foreach ($dir in $testDirs) {
-            $staged = Stage-TestDirectory -SourceDirectory $dir -RunRoot $RunRoot -RepoRoot $RepoRoot
-            $logName = (Sanitize-Name $staged.logical_directory) + ".log"
+        foreach ($runItem in $runItems) {
+            $staged = Stage-TestDirectory -SourceDirectory $runItem.source_directory -RunRoot $RunRoot -RepoRoot $RepoRoot
+            $logicalTarget = $staged.logical_directory
+            $pytestTargets = @($staged.staged_directory)
+            $logLabel = $staged.logical_directory
+
+            if ($runItem.nodeids.Count -gt 0) {
+                $pytestTargets = @(
+                    foreach ($nodeid in $runItem.nodeids) {
+                        (Join-Path $staged.staged_directory $nodeid.relative_file) + $nodeid.suffix
+                    }
+                )
+                if ($runItem.nodeids.Count -eq 1) {
+                    $logicalTarget = $runItem.nodeids[0].logical_nodeid
+                    $logLabel = $logicalTarget
+                }
+                else {
+                    $logicalTarget = "{0} ({1} nodeids)" -f $staged.logical_directory, $runItem.nodeids.Count
+                    $logLabel = $logicalTarget
+                }
+            }
+
+            $logName = (Sanitize-Name $logLabel) + ".log"
             $logPath = Join-Path $logsDir $logName
-            $pytestResult = Invoke-PytestDirectory `
+            $pytestResult = Invoke-PytestTargets `
                 -PythonExe $PythonExe `
-                -Directory $staged.staged_directory `
+                -Targets $pytestTargets `
                 -PytestIni $pytestIni `
                 -LogPath $logPath
             $results += [pscustomobject]@{
                 directory = $staged.source_directory
                 staged_directory = $staged.staged_directory
+                logical_target = $logicalTarget
                 exit_code = $pytestResult.exit_code
                 duration_seconds = $pytestResult.duration_seconds
                 log_path = $pytestResult.log_path
@@ -686,7 +803,7 @@ print(json.dumps({"env_name": env_name, "packages": packages}, ensure_ascii=Fals
             Write-TestProgress `
                 -CompletedCount $completedCount `
                 -TotalCount $totalTests `
-                -LogicalDirectory $staged.logical_directory `
+                -LogicalDirectory $logicalTarget `
                 -Status $pytestResult.status `
                 -LogPath $pytestResult.log_path
         }
@@ -727,6 +844,9 @@ print(json.dumps({"env_name": env_name, "packages": packages}, ensure_ascii=Fals
         -ImportInfo $importInfo
 
     Write-FailureSummary -RepoRoot $RepoRoot -Results $results
+    if (@($results | Where-Object status -eq "failed").Count -gt 0) {
+        throw "One or more verification targets failed. See installed-wheel-report.md for details."
+    }
 }
 finally {
     $Stopwatch.Stop()

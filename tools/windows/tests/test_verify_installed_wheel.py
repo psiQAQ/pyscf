@@ -53,6 +53,10 @@ class VerifyInstalledWheelScriptTests(unittest.TestCase):
         self.assertNotIn(".Replace($RepoRoot", text)
         self.assertIn("Copy-Item -Path (Join-Path $SourceDirectory '*')", text)
         self.assertIn("Join-Path $RunRoot \"tests\"", text)
+        self.assertIn("[string[]]$PytestNodeIds", text)
+        self.assertIn("function Split-PytestNodeId", text)
+        self.assertIn("function Get-PytestNodeGroups", text)
+        self.assertIn('Join-Path $staged.staged_directory $nodeid.relative_file', text)
 
     def test_script_installs_latest_wheel_and_writes_reports(self):
         text = VERIFY_WHEEL.read_text(encoding="utf-8")
@@ -72,15 +76,15 @@ class VerifyInstalledWheelScriptTests(unittest.TestCase):
         self.assertIn("function Write-TestProgress", text)
         self.assertIn("function Write-FailureSummary", text)
         self.assertIn('Write-Host ("[{0}/{1}] {2} completed: {3}. Log: {4}"', text)
-        self.assertIn('Write-Host ("Failed test directories: {0}" -f $failed.Count)', text)
-        self.assertIn('Write-Host ("- {0} | Log: {1}" -f $logicalDirectory, $resolvedLogPath)', text)
-        self.assertIn('Write-Host "Verification completed with failed directories. See installed-wheel-report.md for details."', text)
+        self.assertIn('Write-Host ("Failed verification targets: {0}" -f $failed.Count)', text)
+        self.assertIn('Write-Host ("- {0} | Log: {1}" -f $result.logical_target, $resolvedLogPath)', text)
+        self.assertIn('Write-Host "Verification completed with failed targets. See installed-wheel-report.md for details."', text)
         self.assertIn("Resolve-Path $LogPath", text)
         self.assertIn("Write-TestProgress `", text)
         self.assertIn("Write-FailureSummary -RepoRoot $RepoRoot -Results $results", text)
         self.assertIn("-CompletedCount $completedCount", text)
         self.assertIn("-TotalCount $totalTests", text)
-        self.assertNotIn('throw "One or more test directories failed. See installed-wheel-report.md for details."', text)
+        self.assertIn('throw "One or more verification targets failed. See installed-wheel-report.md for details."', text)
 
     def test_script_supports_optional_test_exclusions(self):
         text = VERIFY_WHEEL.read_text(encoding="utf-8")
@@ -100,6 +104,7 @@ class Win64PackageReadmeTests(unittest.TestCase):
         self.assertIn("-SkipInstall", readme)
         self.assertIn("-KeepRunRoot", readme)
         self.assertIn("-SkipPbc", readme)
+        self.assertIn("-PytestNodeIds", readme)
         self.assertIn("installed-wheel-report-YYYYMMDD-HHMMSS.md", readme)
         self.assertIn("repository checkout", readme)
         self.assertIn("already-installed wheel", readme)
