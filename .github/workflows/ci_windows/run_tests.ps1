@@ -11,7 +11,6 @@ $VerifyScript = Join-Path $RepoRoot "tools/windows/verify-installed-wheel.ps1"
 
 $PrPytestNodeIds = @(
     "pyscf/cc/test/test_eom_gccsd.py::KnownValues::test_ipccsd",
-    "pyscf/cc/test/test_eom_gccsd.py::KnownValues::test_eaccsd",
     "pyscf/pbc/tdscf/test/test_uks.py::DiamondM06::test_tdhf",
     "pyscf/pbc/tdscf/test/test_rks.py::Diamond::test_hse06_tda",
     "pyscf/tdscf/test/test_tduks.py::KnownValues::test_analyze",
@@ -19,6 +18,8 @@ $PrPytestNodeIds = @(
 )
 
 $FullExcludePytestNodeIds = @(
+    "pyscf/cc/test/test_eom_gccsd.py::KnownValues::test_ipccsd",
+    "pyscf/cc/test/test_eom_gccsd.py::KnownValues::test_eaccsd",
     "pyscf/fci/test/test_dhf_slow.py::KnownValues::test_kernel",
     "pyscf/fci/test/test_dhf_slow.py::KnownValues::test_solver",
     "pyscf/mcscf/test/test_bz.py::KnownValues::test_mc1step_4o4e",

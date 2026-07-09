@@ -46,6 +46,7 @@ class WindowsCIWorkflowTests(unittest.TestCase):
         self.assertIn("-PytestNodeIds", helper)
         self.assertIn("-ExcludePytestNodeIds", helper)
         self.assertIn("test_eom_gccsd.py::KnownValues::test_ipccsd", helper)
+        self.assertEqual(helper.count("test_eom_gccsd.py::KnownValues::test_ipccsd"), 2)
         self.assertIn("test_eom_gccsd.py::KnownValues::test_eaccsd", helper)
         self.assertIn("test_dhf_slow.py::KnownValues::test_kernel", helper)
         self.assertIn("test_bz.py::KnownValues::test_mc1step_4o4e", helper)
