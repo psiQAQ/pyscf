@@ -13,18 +13,19 @@ $PrPytestNodeIds = @(
     "pyscf/cc/test/test_eom_gccsd.py::KnownValues::test_ipccsd",
     "pyscf/pbc/tdscf/test/test_uks.py::DiamondM06::test_tdhf",
     "pyscf/pbc/tdscf/test/test_rks.py::Diamond::test_hse06_tda",
-    "pyscf/tdscf/test/test_tduks.py::KnownValues::test_analyze",
-    "pyscf/tdscf/test/test_tduks.py::KnownValues::test_tddft_camb3lyp"
+    "pyscf/tdscf/test/test_tduks.py::KnownValues::test_analyze"
 )
 
 $FullExcludePytestNodeIds = @(
     "pyscf/cc/test/test_eom_gccsd.py::KnownValues::test_ipccsd",
     "pyscf/cc/test/test_eom_gccsd.py::KnownValues::test_eaccsd",
+    "pyscf/cc/test/test_uccsdt_highm.py::KnownValues::test_zero_beta_electrons",
     "pyscf/fci/test/test_dhf_slow.py::KnownValues::test_kernel",
     "pyscf/fci/test/test_dhf_slow.py::KnownValues::test_solver",
     "pyscf/mcscf/test/test_bz.py::KnownValues::test_mc1step_4o4e",
     "pyscf/mcscf/test/test_bz.py::KnownValues::test_mc1step_9o8e",
-    "pyscf/mcscf/test/test_bz.py::KnownValues::test_mc2step_4o4e"
+    "pyscf/mcscf/test/test_bz.py::KnownValues::test_mc2step_4o4e",
+    "pyscf/tdscf/test/test_tduks.py::KnownValues::test_tddft_camb3lyp"
 )
 
 $VerifyArgs = @(

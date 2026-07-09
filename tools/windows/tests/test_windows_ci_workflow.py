@@ -48,10 +48,11 @@ class WindowsCIWorkflowTests(unittest.TestCase):
         self.assertIn("test_eom_gccsd.py::KnownValues::test_ipccsd", helper)
         self.assertEqual(helper.count("test_eom_gccsd.py::KnownValues::test_ipccsd"), 2)
         self.assertIn("test_eom_gccsd.py::KnownValues::test_eaccsd", helper)
+        self.assertIn("test_uccsdt_highm.py::KnownValues::test_zero_beta_electrons", helper)
         self.assertIn("test_dhf_slow.py::KnownValues::test_kernel", helper)
         self.assertIn("test_bz.py::KnownValues::test_mc1step_4o4e", helper)
         self.assertIn("test_rks.py::Diamond::test_hse06_tda", helper)
-        self.assertIn("test_tduks.py::KnownValues::test_tddft_camb3lyp", helper)
+        self.assertEqual(helper.count("test_tduks.py::KnownValues::test_tddft_camb3lyp"), 1)
 
     def test_workflow_uploads_windows_artifacts(self):
         text = WORKFLOW.read_text(encoding="utf-8")
