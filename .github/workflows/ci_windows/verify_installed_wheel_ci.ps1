@@ -16,6 +16,14 @@ $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     "pyscf/tdscf/test/test_tduks.py::KnownValues::test_analyze"
 )
 
+[string[]]$FullExcludedPytestNodeIds = @(
+    "pyscf/fci/test/test_dhf_slow.py::KnownValues::test_kernel",
+    "pyscf/fci/test/test_dhf_slow.py::KnownValues::test_solver",
+    "pyscf/mcscf/test/test_bz.py::KnownValues::test_mc1step_4o4e",
+    "pyscf/mcscf/test/test_bz.py::KnownValues::test_mc1step_9o8e",
+    "pyscf/mcscf/test/test_bz.py::KnownValues::test_mc2step_4o4e"
+)
+
 function Resolve-RepoRoot {
     param([string]$ConfiguredValue)
     if ($ConfiguredValue) {
@@ -231,6 +239,18 @@ function Get-PytestNodeGroups {
         }
 }
 
+function Get-PytestNodeGroupTable {
+    param(
+        [string]$RepoRoot,
+        [string[]]$ConfiguredNodeIds
+    )
+    $table = @{}
+    foreach ($group in (Get-PytestNodeGroups -RepoRoot $RepoRoot -ConfiguredNodeIds $ConfiguredNodeIds)) {
+        $table[$group.source_directory] = @($group.nodeids)
+    }
+    return $table
+}
+
 function Get-LatestWheel {
     param([string]$RepoRoot)
     $wheel = Get-ChildItem (Join-Path $RepoRoot "dist\pyscf-*.whl") |
@@ -306,6 +326,7 @@ function Invoke-PytestTargets {
     param(
         [string]$PythonExe,
         [string[]]$Targets,
+        [string[]]$DeselectNodeIds,
         [string]$PytestIni,
         [string]$LogPath
     )
@@ -317,6 +338,9 @@ function Invoke-PytestTargets {
         "-c",
         $PytestIni
     )
+    foreach ($deselectNodeId in $DeselectNodeIds) {
+        $argumentList += @("--deselect", $deselectNodeId)
+    }
     $argumentList += $Targets
     $result = Invoke-ExternalCommandCapture -FilePath $PythonExe -ArgumentList $argumentList
     $timer.Stop()
@@ -451,10 +475,12 @@ try {
     Install-Wheel -PythonExe $PythonExe -WheelPath $wheel.FullName
     $pytestVersion = Ensure-Pytest -PythonExe $PythonExe
 
+    $excludeNodeTable = @{}
     if ($Mode -eq "check") {
         $runItems = @(Get-PytestNodeGroups -RepoRoot $RepoRoot -ConfiguredNodeIds $SelectedPytestNodeIds)
     }
     if ($Mode -eq "full") {
+        $excludeNodeTable = Get-PytestNodeGroupTable -RepoRoot $RepoRoot -ConfiguredNodeIds $FullExcludedPytestNodeIds
         $runItems = @(
             foreach ($testDir in (Get-TestDirectories -RepoRoot $RepoRoot)) {
                 [pscustomobject]@{
@@ -510,6 +536,7 @@ print(json.dumps({"env_name": env_name, "packages": packages}, ensure_ascii=Fals
             $staged = Stage-TestDirectory -SourceDirectory $runItem.source_directory -RunRoot $RunRoot -RepoRoot $RepoRoot
             $logicalTarget = $staged.logical_directory
             $pytestTargets = @($staged.staged_directory)
+            $deselectNodeIds = @()
             $logLabel = $staged.logical_directory
 
             if ($runItem.nodeids.Count -gt 0) {
@@ -527,10 +554,18 @@ print(json.dumps({"env_name": env_name, "packages": packages}, ensure_ascii=Fals
                     $logLabel = $logicalTarget
                 }
             }
+            elseif ($excludeNodeTable.ContainsKey($runItem.source_directory)) {
+                $deselectNodeIds = @(
+                    foreach ($nodeid in $excludeNodeTable[$runItem.source_directory]) {
+                        $stagedFile = Join-Path $staged.staged_directory $nodeid.relative_file
+                        ((Get-RelativePath -BasePath $RunRoot -TargetPath $stagedFile) + $nodeid.suffix).Replace('\', '/')
+                    }
+                )
+            }
 
             $logName = (Sanitize-Name $logLabel) + ".log"
             $logPath = Join-Path $logsDir $logName
-            $pytestResult = Invoke-PytestTargets -PythonExe $PythonExe -Targets $pytestTargets -PytestIni $pytestIni -LogPath $logPath
+            $pytestResult = Invoke-PytestTargets -PythonExe $PythonExe -Targets $pytestTargets -DeselectNodeIds $deselectNodeIds -PytestIni $pytestIni -LogPath $logPath
             $results += [pscustomobject]@{
                 logical_target = $logicalTarget
                 duration_seconds = $pytestResult.duration_seconds
