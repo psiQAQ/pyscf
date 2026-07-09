@@ -5,7 +5,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
-$BuildScript = Join-Path $RepoRoot "tools/windows/build-wheel.ps1"
+$BuildScript = Join-Path $RepoRoot ".github\workflows\ci_windows\build_wheel_ci.ps1"
 
 $BuildArgs = @(
     "--no-capture-output",

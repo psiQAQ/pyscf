@@ -3,8 +3,8 @@ import unittest
 
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
-TEST_ENV = REPO_ROOT / "tools" / "windows" / "environment-test.yml"
-TEST_REQ = REPO_ROOT / "tools" / "windows" / "requirements-test.txt"
+TEST_ENV = REPO_ROOT / ".github" / "workflows" / "ci_windows" / "environment-test.yml"
+TEST_REQ = REPO_ROOT / ".github" / "workflows" / "ci_windows" / "requirements-test.txt"
 
 
 class WindowsTestEnvironmentYmlTests(unittest.TestCase):

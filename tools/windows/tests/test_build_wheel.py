@@ -3,8 +3,8 @@ import unittest
 
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
-BUILD_WHEEL = REPO_ROOT / "tools" / "windows" / "build-wheel.ps1"
-ENVIRONMENT = REPO_ROOT / "tools" / "windows" / "environment.yml"
+BUILD_WHEEL = REPO_ROOT / ".github" / "workflows" / "ci_windows" / "build_wheel_ci.ps1"
+ENVIRONMENT = REPO_ROOT / ".github" / "workflows" / "ci_windows" / "environment-build.yml"
 GITATTRIBUTES = REPO_ROOT / ".gitattributes"
 
 
@@ -26,6 +26,7 @@ class BuildWheelLayoutTests(unittest.TestCase):
         self.assertIn('"libxc.dll"', text)
         self.assertIn("Copy-Item -LiteralPath (Join-Path $RuntimeDllDir $name) -Destination (Join-Path $LibDir $name) -Force", text)
         self.assertIn("Copy-Item -LiteralPath $source -Destination (Join-Path $LibDir $name) -Force", text)
+        self.assertIn(".github\\workflows\\ci_windows\\build-logs", text)
 
     def test_build_script_keeps_xcfun_enabled_like_upstream_release_builds(self):
         text = BUILD_WHEEL.read_text(encoding="utf-8")

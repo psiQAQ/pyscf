@@ -1,7 +1,7 @@
 param(
     [string]$TestEnvName = "pyscf-win313-test",
-    [string]$EnvironmentFile = "tools/windows/environment-test.yml",
-    [string]$RequirementsFile = "tools/windows/requirements-test.txt"
+    [string]$EnvironmentFile = ".github/workflows/ci_windows/environment-test.yml",
+    [string]$RequirementsFile = ".github/workflows/ci_windows/requirements-test.txt"
 )
 
 $ErrorActionPreference = "Stop"

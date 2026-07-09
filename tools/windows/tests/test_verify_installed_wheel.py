@@ -3,15 +3,14 @@ import unittest
 
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
-VERIFY_WHEEL = REPO_ROOT / "tools" / "windows" / "verify-installed-wheel.ps1"
+VERIFY_WHEEL = REPO_ROOT / ".github" / "workflows" / "ci_windows" / "verify_installed_wheel_ci.ps1"
 
 
 class VerifyInstalledWheelScriptTests(unittest.TestCase):
-    def test_script_exists_and_reuses_build_wheel_entrypoint(self):
+    def test_script_exists_and_reuses_ci_build_entrypoint(self):
         text = VERIFY_WHEEL.read_text(encoding="utf-8")
-        self.assertIn("build-wheel.ps1", text)
         self.assertIn("param(", text)
-        self.assertIn("[switch]$SkipBuild", text)
+        self.assertIn('[ValidateSet("full", "check")]', text)
 
     def test_script_checks_pytest_before_running_suite(self):
         text = VERIFY_WHEEL.read_text(encoding="utf-8")
@@ -25,12 +24,8 @@ class VerifyInstalledWheelScriptTests(unittest.TestCase):
         self.assertIn('$env:CONDA_PREFIX', text)
         self.assertIn('Join-Path $env:CONDA_PREFIX "python.exe"', text)
         self.assertIn('Test-Path $condaPython', text)
-        self.assertIn('function Normalize-TestRootsBinding', text)
         self.assertIn("PythonExe resolved to a directory", text)
-        self.assertIn("comma-separated values", text)
-        self.assertIn('function Expand-PathArguments', text)
-        self.assertIn(".Split(',')", text)
-        self.assertIn('Test-Path $candidatePath -PathType Container', text)
+        self.assertIn('Test-Path $resolved -PathType Container', text)
 
     def test_script_runs_from_temp_root_and_clears_pythonpath(self):
         text = VERIFY_WHEEL.read_text(encoding="utf-8")
@@ -53,19 +48,15 @@ class VerifyInstalledWheelScriptTests(unittest.TestCase):
         self.assertNotIn(".Replace($RepoRoot", text)
         self.assertIn("Copy-Item -Path (Join-Path $SourceDirectory '*')", text)
         self.assertIn("Join-Path $RunRoot \"tests\"", text)
-        self.assertIn("[string[]]$PytestNodeIds", text)
-        self.assertIn("[string[]]$ExcludePytestNodeIds", text)
+        self.assertIn("[string[]]$SelectedPytestNodeIds", text)
         self.assertIn("function Split-PytestNodeId", text)
         self.assertIn("function Get-PytestNodeGroups", text)
         self.assertIn('IndexOf("::"', text)
         self.assertNotIn('.Split("::", 2', text)
         self.assertIn('Join-Path $staged.staged_directory $nodeid.relative_file', text)
-        self.assertIn('Get-RelativePath -BasePath $RunRoot -TargetPath $stagedFile', text)
-        self.assertIn("function Write-PytestDeselectPlugin", text)
-        self.assertIn("PYSCF_DESELECT_NODEIDS", text)
-        self.assertIn("pytest_collection_modifyitems", text)
+        self.assertNotIn("PYSCF_DESELECT_NODEIDS", text)
 
-    def test_script_installs_latest_wheel_and_writes_reports(self):
+    def test_script_installs_latest_wheel_and_writes_ci_reports(self):
         text = VERIFY_WHEEL.read_text(encoding="utf-8")
         self.assertIn("Get-ChildItem (Join-Path $RepoRoot \"dist\\pyscf-*.whl\")", text)
         self.assertIn('"pip"', text)
@@ -76,49 +67,32 @@ class VerifyInstalledWheelScriptTests(unittest.TestCase):
         self.assertIn("installed-wheel-report.json", text)
         self.assertIn("installed-wheel-report-$reportStamp.md", text)
         self.assertIn("installed-wheel-report-$reportStamp.json", text)
+        self.assertIn('.github\\workflows\\ci_windows\\reports', text)
         self.assertIn("pytest_summary", text)
         self.assertIn("Get-RelativePath -BasePath $RepoRoot -TargetPath $resolvedLog", text)
         self.assertNotIn('-PytestIni (Join-Path $RepoRoot "pytest.ini")', text)
-        self.assertIn("staged_directory", text)
         self.assertIn("function Write-TestProgress", text)
         self.assertIn("function Write-FailureSummary", text)
         self.assertIn('Write-Host ("[{0}/{1}] {2} completed: {3}. Log: {4}"', text)
         self.assertIn('Write-Host ("Failed verification targets: {0}" -f $failed.Count)', text)
         self.assertIn('Write-Host ("- {0} | Log: {1}" -f $result.logical_target, $resolvedLogPath)', text)
-        self.assertIn('Write-Host "Verification completed with failed targets. See installed-wheel-report.md for details."', text)
         self.assertIn("Resolve-Path $LogPath", text)
-        self.assertIn("Write-TestProgress `", text)
-        self.assertIn("Write-FailureSummary -RepoRoot $RepoRoot -Results $results", text)
+        self.assertIn("Write-TestProgress -CompletedCount $completedCount", text)
+        self.assertIn("Write-FailureSummary -Results $results", text)
         self.assertIn("-CompletedCount $completedCount", text)
         self.assertIn("-TotalCount $totalTests", text)
         self.assertIn('throw "One or more verification targets failed. See installed-wheel-report.md for details."', text)
 
-    def test_script_supports_optional_test_exclusions(self):
+    def test_script_supports_full_and_check_modes(self):
         text = VERIFY_WHEEL.read_text(encoding="utf-8")
-        self.assertIn("[string[]]$ExcludeTestRoots", text)
-        self.assertIn("[string[]]$ExcludePytestNodeIds", text)
-        self.assertIn("[switch]$SkipPbc", text)
-        self.assertIn("ExcludeTestRoots", text)
-        self.assertIn("ExcludePytestNodeIds", text)
-        self.assertIn("SkipPbc", text)
-        self.assertIn('Join-Path $RepoRoot "pyscf\\pbc"', text)
-
-
-class Win64PackageReadmeTests(unittest.TestCase):
-    def test_readme_documents_verification_parameters(self):
-        readme = (REPO_ROOT / "tools" / "windows" / "win64-package-readme.md").read_text(encoding="utf-8")
-        self.assertIn("-TestRoots", readme)
-        self.assertIn("-ExcludeTestRoots", readme)
-        self.assertIn("-SkipBuild", readme)
-        self.assertIn("-SkipInstall", readme)
-        self.assertIn("-KeepRunRoot", readme)
-        self.assertIn("-SkipPbc", readme)
-        self.assertIn("-PytestNodeIds", readme)
-        self.assertIn("installed-wheel-report-YYYYMMDD-HHMMSS.md", readme)
-        self.assertIn("repository checkout", readme)
-        self.assertIn("already-installed wheel", readme)
-        self.assertIn("Unlike the upstream CI", readme)
-        self.assertIn("source-tree pytest", readme)
+        self.assertIn('[ValidateSet("full", "check")]', text)
+        self.assertIn("[string[]]$SelectedPytestNodeIds", text)
+        self.assertIn('if ($Mode -eq "check")', text)
+        self.assertIn('if ($Mode -eq "full")', text)
+        self.assertIn("test_eom_gccsd.py::KnownValues::test_ipccsd", text)
+        self.assertIn("test_rks.py::Diamond::test_hse06_tda", text)
+        self.assertIn("test_tduks.py::KnownValues::test_analyze", text)
+        self.assertIn("test_uks.py::DiamondM06::test_tdhf", text)
 
 
 if __name__ == "__main__":

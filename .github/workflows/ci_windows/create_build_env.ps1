@@ -1,5 +1,5 @@
 param(
-    [string]$EnvironmentFile = "tools/windows/environment.yml"
+    [string]$EnvironmentFile = ".github/workflows/ci_windows/environment-build.yml"
 )
 
 $ErrorActionPreference = "Stop"
