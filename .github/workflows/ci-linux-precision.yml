@@ -1,0 +1,37 @@
+name: Linux precision triage
+
+on: workflow_dispatch
+
+jobs:
+  linux-precision:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.8", "3.12"]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install Linux dependencies
+        run: |
+          ./.github/workflows/ci_linux/deps_apt.sh
+          ./.github/workflows/ci_linux/python_deps.sh
+          ./.github/workflows/ci_linux/build_pyscf.sh
+      - name: Run precision tests
+        run: bash ./.github/workflows/run_linux_precision_tests.sh
+      - name: Publish precision summary
+        if: always()
+        run: |
+          if [ -f tmp/linux-precision-results/summary.md ]; then
+            cat tmp/linux-precision-results/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload precision logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-precision-${{ matrix.python-version }}
+          path: tmp/linux-precision-results
+          if-no-files-found: warn
