@@ -51,7 +51,7 @@ tests=(
   'pyscf/mcscf/test/test_bz.py::KnownValues::test_mc2step_4o4e'
 )
 
-results_dir='tmp/linux-precision-results'
+results_dir='tmp/precision-results'
 mkdir -p "$results_dir/logs"
 printf 'test_id,attempt,exit_code,result,log_file\n' > "$results_dir/attempts.csv"
 printf 'test_id,attempts,passes,failures\n' > "$results_dir/summary.csv"
@@ -83,7 +83,7 @@ for test_id in "${tests[@]}"; do
 done
 
 {
-    printf '## Linux precision test summary\n\n'
+    printf '## Precision test summary\n\n'
     printf '| Test ID | Attempts | Passes | Failures |\n'
     printf '| --- | ---: | ---: | ---: |\n'
     while IFS=, read -r test_id attempts passes failures; do
