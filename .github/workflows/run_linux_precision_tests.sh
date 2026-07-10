@@ -42,6 +42,13 @@ tests=(
   'pyscf/mcscf/test/test_casci.py::KnownValues::test_with_x2c_scanner'
   'pyscf/tdscf/test/test_tdrks_vv10.py::KnownValues::test_wb97xv_tda_triplet'
   'pyscf/pbc/tdscf/test/test_uks.py::DiamondM06::test_hse03_tda'
+  # The following tests are known to fail on Windows CI.
+  'pyscf/cc/test/test_uccsdt_highm.py::KnownValues::test_zero_beta_electrons'
+  'pyscf/fci/test/test_dhf_slow.py::KnownValues::test_kernel'
+  'pyscf/fci/test/test_dhf_slow.py::KnownValues::test_solver'
+  'pyscf/mcscf/test/test_bz.py::KnownValues::test_mc1step_4o4e'
+  'pyscf/mcscf/test/test_bz.py::KnownValues::test_mc1step_9o8e'
+  'pyscf/mcscf/test/test_bz.py::KnownValues::test_mc2step_4o4e'
 )
 
 results_dir='tmp/linux-precision-results'
