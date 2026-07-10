@@ -16,28 +16,32 @@ class WindowsCIWorkflowTests(unittest.TestCase):
         self.assertTrue(RUN_TESTS.exists())
         self.assertTrue(VERIFY.exists())
 
-    def test_workflow_defines_build_and_check_jobs(self):
+    def test_workflow_defines_pr_check_and_full_validation_jobs(self):
         text = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("name: Windows CI", text)
         self.assertIn("https://docs.github.com/en/actions/language-and-framework-guides/using-python-with-github-actions", text)
         self.assertIn("psiQAQ", text)
         self.assertIn("jeanwsr", text)
         self.assertIn("workflow_dispatch:", text)
-        self.assertIn("windows-build:", text)
         self.assertIn("windows-build-check:", text)
+        self.assertIn("windows-build-full:", text)
+        self.assertIn("schedule:", text)
+        self.assertIn("cron: '*/15 * * * *'", text)
         self.assertIn("runs-on: windows-latest", text)
         self.assertIn("timeout-minutes: 180", text)
         self.assertIn("timeout-minutes: 90", text)
         self.assertIn("github.event_name == 'push' || github.event_name == 'pull_request'", text)
-        self.assertIn("github.event_name == 'workflow_dispatch'", text)
+        self.assertIn("github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'", text)
 
-    def test_workflow_runs_full_on_pr_and_check_on_dispatch(self):
+    def test_workflow_runs_check_on_pr_and_full_on_manual_or_schedule(self):
         text = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("conda-incubator/setup-miniconda@v4", text)
         self.assertIn("msys2/setup-msys2@v2", text)
         self.assertIn(".github\\workflows\\run_ci_windows.ps1", text)
-        self.assertIn("-Mode full", text)
-        self.assertIn("-Mode check", text)
+        check_job = text[text.index("windows-build-check:"):text.index("windows-build-full:")]
+        full_job = text[text.index("windows-build-full:"):]
+        self.assertIn("-Mode check", check_job)
+        self.assertIn("-Mode full", full_job)
 
     def test_windows_ci_helpers_use_ci_local_entrypoints(self):
         wrapper = RUN_CI_WINDOWS.read_text(encoding="utf-8")
