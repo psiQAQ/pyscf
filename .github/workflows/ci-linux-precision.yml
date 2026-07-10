@@ -1,0 +1,52 @@
+name: Precision triage
+
+on: workflow_dispatch
+
+jobs:
+  precision:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python-version: "3.8"
+          - os: ubuntu-latest
+            python-version: "3.12"
+          - os: ubuntu-latest
+            python-version: "3.13"
+          - os: macos-latest
+            python-version: "3.8"
+          - os: macos-latest
+            python-version: "3.13"
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install platform dependencies
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            ci_os=linux
+          else
+            ci_os=macos
+          fi
+          ".github/workflows/ci_${ci_os}/deps_apt.sh"
+          ".github/workflows/ci_${ci_os}/python_deps.sh"
+          ".github/workflows/ci_${ci_os}/build_pyscf.sh"
+      - name: Run precision tests
+        run: bash ./.github/workflows/run_linux_precision_tests.sh
+      - name: Publish precision summary
+        if: always()
+        run: |
+          if [ -f tmp/precision-results/summary.md ]; then
+            cat tmp/precision-results/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload precision logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: precision-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: tmp/precision-results
+          if-no-files-found: warn
