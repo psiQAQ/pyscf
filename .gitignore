@@ -94,3 +94,6 @@ pyscf/lib/*.dll
 # mypy
 .mypy_cache/
 
+# Local agent instructions
+AGENTS.md
+
