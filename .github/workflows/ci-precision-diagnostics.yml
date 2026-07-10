@@ -1,0 +1,208 @@
+name: Precision diagnostics
+
+on: workflow_dispatch
+
+jobs:
+  deterministic-reference-check:
+    continue-on-error: true
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python-version: "3.8"
+          - os: ubuntu-latest
+            python-version: "3.12"
+          - os: ubuntu-latest
+            python-version: "3.13"
+          - os: macos-latest
+            python-version: "3.8"
+          - os: macos-latest
+            python-version: "3.13"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install platform dependencies
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then ci_os=linux; else ci_os=macos; fi
+          ".github/workflows/ci_${ci_os}/deps_apt.sh"
+          ".github/workflows/ci_${ci_os}/python_deps.sh"
+          ".github/workflows/ci_${ci_os}/build_pyscf.sh"
+      - name: Run known reference checks without gating diagnostics
+        run: |
+          export PYTHONPATH="$PWD:${PYTHONPATH:-}"
+          export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
+          if [ "$RUNNER_OS" = Linux ]; then ulimit -s 20000; fi
+          python .github/workflows/precision_experiments.py --experiment reference --repeats 1 --output tmp/precision-diagnostics/reference
+          python .github/workflows/collect_precision_environment.py tmp/precision-diagnostics/reference/environment/runtime.json
+      - name: Publish reference summary
+        if: always()
+        run: cat tmp/precision-diagnostics/reference/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload reference diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: precision-reference-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: tmp/precision-diagnostics/reference
+          if-no-files-found: error
+
+  eom-root-diagnostics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.8", "3.12"]
+        threads: [1, 4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install Linux dependencies
+        run: |
+          .github/workflows/ci_linux/deps_apt.sh
+          .github/workflows/ci_linux/python_deps.sh
+          .github/workflows/ci_linux/build_pyscf.sh
+      - name: Run EOM root diagnostics
+        env:
+          OMP_NUM_THREADS: ${{ matrix.threads }}
+          OPENBLAS_NUM_THREADS: ${{ matrix.threads }}
+          MKL_NUM_THREADS: ${{ matrix.threads }}
+          VECLIB_MAXIMUM_THREADS: ${{ matrix.threads }}
+        run: |
+          export PYTHONPATH="$PWD:${PYTHONPATH:-}"
+          ulimit -s 20000
+          python .github/workflows/precision_experiments.py --experiment eom --repeats 100 --output tmp/precision-diagnostics/eom
+          python .github/workflows/collect_precision_environment.py tmp/precision-diagnostics/eom/environment/runtime.json
+      - name: Publish EOM summary
+        if: always()
+        run: cat tmp/precision-diagnostics/eom/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload EOM diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: precision-eom-ubuntu-py${{ matrix.python-version }}-t${{ matrix.threads }}
+          path: tmp/precision-diagnostics/eom
+          if-no-files-found: error
+
+  ucasscf-path-diagnostics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        threads: [1, 4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install Linux dependencies
+        run: |
+          .github/workflows/ci_linux/deps_apt.sh
+          .github/workflows/ci_linux/python_deps.sh
+          .github/workflows/ci_linux/build_pyscf.sh
+      - name: Run UCASSCF path diagnostics
+        env:
+          OMP_NUM_THREADS: ${{ matrix.threads }}
+          OPENBLAS_NUM_THREADS: ${{ matrix.threads }}
+          MKL_NUM_THREADS: ${{ matrix.threads }}
+          VECLIB_MAXIMUM_THREADS: ${{ matrix.threads }}
+        run: |
+          export PYTHONPATH="$PWD:${PYTHONPATH:-}"
+          ulimit -s 20000
+          python .github/workflows/precision_experiments.py --experiment ucasscf --repeats 100 --output tmp/precision-diagnostics/ucasscf
+          python .github/workflows/collect_precision_environment.py tmp/precision-diagnostics/ucasscf/environment/runtime.json
+      - name: Publish UCASSCF summary
+        if: always()
+        run: cat tmp/precision-diagnostics/ucasscf/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload UCASSCF diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: precision-ucasscf-ubuntu-py3.12-t${{ matrix.threads }}
+          path: tmp/precision-diagnostics/ucasscf
+          if-no-files-found: error
+
+  sgx-finite-difference-diagnostics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        threads: [1, 4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install Linux dependencies
+        run: |
+          .github/workflows/ci_linux/deps_apt.sh
+          .github/workflows/ci_linux/python_deps.sh
+          .github/workflows/ci_linux/build_pyscf.sh
+      - name: Run SGX finite-difference diagnostics
+        env:
+          OMP_NUM_THREADS: ${{ matrix.threads }}
+          OPENBLAS_NUM_THREADS: ${{ matrix.threads }}
+          MKL_NUM_THREADS: ${{ matrix.threads }}
+          VECLIB_MAXIMUM_THREADS: ${{ matrix.threads }}
+        run: |
+          export PYTHONPATH="$PWD:${PYTHONPATH:-}"
+          ulimit -s 20000
+          python .github/workflows/precision_experiments.py --experiment sgx --repeats 100 --output tmp/precision-diagnostics/sgx
+          python .github/workflows/collect_precision_environment.py tmp/precision-diagnostics/sgx/environment/runtime.json
+      - name: Publish SGX summary
+        if: always()
+        run: cat tmp/precision-diagnostics/sgx/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload SGX diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: precision-sgx-ubuntu-py3.12-t${{ matrix.threads }}
+          path: tmp/precision-diagnostics/sgx
+          if-no-files-found: error
+
+  tddft-root-diagnostics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        threads: [1, 4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.8"
+      - name: Install Linux dependencies
+        run: |
+          .github/workflows/ci_linux/deps_apt.sh
+          .github/workflows/ci_linux/python_deps.sh
+          .github/workflows/ci_linux/build_pyscf.sh
+      - name: Run TDDFT root diagnostics
+        env:
+          OMP_NUM_THREADS: ${{ matrix.threads }}
+          OPENBLAS_NUM_THREADS: ${{ matrix.threads }}
+          MKL_NUM_THREADS: ${{ matrix.threads }}
+          VECLIB_MAXIMUM_THREADS: ${{ matrix.threads }}
+        run: |
+          export PYTHONPATH="$PWD:${PYTHONPATH:-}"
+          ulimit -s 20000
+          python .github/workflows/precision_experiments.py --experiment tddft --repeats 100 --output tmp/precision-diagnostics/tddft
+          python .github/workflows/collect_precision_environment.py tmp/precision-diagnostics/tddft/environment/runtime.json
+      - name: Publish TDDFT summary
+        if: always()
+        run: cat tmp/precision-diagnostics/tddft/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload TDDFT diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: precision-tddft-ubuntu-py3.8-t${{ matrix.threads }}
+          path: tmp/precision-diagnostics/tddft
+          if-no-files-found: error
