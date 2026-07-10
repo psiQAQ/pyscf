@@ -1,3 +1,14 @@
+#
+# Windows wheel build flow:
+# 1. Resolve the repo root, Python interpreter, MSYS2 runtime directory, and toolchain executables.
+# 2. Start a transcript so the full Windows build session is preserved in a standalone log file.
+# 3. Prepend the conda/MSYS2 toolchain paths so CMake, Ninja, gcc, and runtime DLL lookup stay deterministic.
+# 4. Optionally clean previous build/dist outputs when the caller requests a fresh rebuild.
+# 5. Configure the Windows build environment variables used by setuptools/CMake/Ninja.
+# 6. Copy the required MSYS2 runtime DLLs into pyscf/lib so the wheel can import on a clean machine.
+# 7. Retry support-DLL collection after an initial bootstrap build when Windows dependencies are generated lazily.
+# 8. Run the final wheel build and leave both the wheel artifact and the transcript log for later inspection.
+#
 param(
     [string]$PythonExe = "",
     [string]$RuntimeDllDir = "",
@@ -11,6 +22,8 @@ $TranscriptStarted = $false
 $LogPath = $null
 
 $RuntimeDlls = @(
+    # Windows wheels do not get the MSYS2 UCRT/OpenBLAS runtime "for free".
+    # These DLLs must be bundled next to pyscf/lib binaries for import-time loading.
     "libgcc_s_seh-1.dll",
     "libgomp-1.dll",
     "libgfortran-5.dll",
@@ -23,6 +36,7 @@ $RuntimeDlls = @(
 $SupportDlls = @(
     @("libcint.dll"),
     @("libxc.dll"),
+    # xcfun shows up under either name depending on how the Windows dependency build exported it.
     @("xcfun.dll", "libxcfun.dll")
 )
 
@@ -84,6 +98,7 @@ function Resolve-RuntimeDllDir {
         return (Resolve-Path $ConfiguredValue).Path
     }
 
+    # Prefer the active gcc location first; hosted Windows runners often have more than one MSYS2 install.
     $gccCmd = Get-Command gcc -ErrorAction SilentlyContinue
     if ($gccCmd) {
         return (Split-Path $gccCmd.Source -Parent)
@@ -195,6 +210,8 @@ try {
         $PythonDir,
         $env:PATH
     ) | Where-Object { $_ } | Select-Object -Unique
+    # Front-load the conda/MSYS2 toolchain so CMake, Ninja, gcc, and dependent DLL discovery resolve
+    # against the intended Windows build environment instead of a host-global installation.
     $env:PATH = $BootstrapPaths -join ';'
 
     Require-Command "cmake" | Out-Null
@@ -210,11 +227,15 @@ try {
     $env:CC = "gcc"
     $env:CXX = "g++"
     $env:CMAKE_BUILD_PARALLEL_LEVEL = "8"
+    # OpenBLAS is consumed through the MSYS2 import library on Windows; the .dll.a keeps CMake/Ninja
+    # linking consistent with the runtime DLLs that are later copied into the wheel payload.
     $env:CMAKE_CONFIGURE_ARGS = "-G Ninja -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DBLAS_LIBRARIES=$RuntimeDllDir\\..\\lib\\libopenblas.dll.a -DENABLE_XCFUN=ON -DBUILD_XCFUN=ON"
 
     Copy-RequiredDlls -RuntimeDllDir $RuntimeDllDir -LibDir $LibDir
     $missingSupportDlls = @(Copy-SupportDlls -DepsBinDir $DepsBinDir -LibDir $LibDir -AllowMissing)
     if ($missingSupportDlls.Count -gt 0) {
+        # Some support DLLs are generated only after the first dependency build pass on Windows.
+        # Bootstrap once, then copy the freshly produced DLLs before the final wheel build.
         Write-Host "Missing support DLLs will be retried after the first wheel build pass."
         Invoke-WheelBuild -PythonExe $PythonExe -RepoRoot $RepoRoot
     }

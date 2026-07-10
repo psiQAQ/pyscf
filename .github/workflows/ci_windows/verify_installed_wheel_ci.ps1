@@ -1,3 +1,14 @@
+#
+# Windows installed-wheel verification flow:
+# 1. Resolve the repo root and target Python interpreter, then locate the newest built wheel under dist/.
+# 2. Force-reinstall that wheel into the active verification environment so tests exercise the packaged artifact.
+# 3. Create an isolated temporary run root with a local PySCF config and temp directory for this CI run only.
+# 4. Copy the shared repo pytest.ini into the run root and scrub host-side pytest/PYTHONPATH overrides.
+# 5. Stage each test directory into the temporary run root so pytest cannot accidentally import from the source tree.
+# 6. Run either the selected PR check nodeids or the full per-directory sweep while streaming pytest output to CI logs.
+# 7. Record per-target logs and summary reports, then count leftover temp files inside the disposable run root.
+# 8. Fail the job when any verification target fails or when temporary files are left behind after the run.
+#
 param(
     [ValidateSet("full", "check")]
     [string]$Mode = "full",
@@ -14,14 +25,6 @@ $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     "pyscf/pbc/tdscf/test/test_uks.py::DiamondM06::test_tdhf",
     "pyscf/pbc/tdscf/test/test_rks.py::Diamond::test_hse06_tda",
     "pyscf/tdscf/test/test_tduks.py::KnownValues::test_analyze"
-)
-
-[string[]]$FullExcludedPytestNodeIds = @(
-    "pyscf/fci/test/test_dhf_slow.py::KnownValues::test_kernel",
-    "pyscf/fci/test/test_dhf_slow.py::KnownValues::test_solver",
-    "pyscf/mcscf/test/test_bz.py::KnownValues::test_mc1step_4o4e",
-    "pyscf/mcscf/test/test_bz.py::KnownValues::test_mc1step_9o8e",
-    "pyscf/mcscf/test/test_bz.py::KnownValues::test_mc2step_4o4e"
 )
 
 function Resolve-RepoRoot {
@@ -41,6 +44,8 @@ function Resolve-PythonExe {
         }
         return $resolved
     }
+    # On Windows CI, PATH can still point at a host interpreter after conda activation.
+    # Prefer CONDA_PREFIX explicitly so build/verify always target the intended environment.
     if ($env:CONDA_PREFIX) {
         $condaPython = Join-Path $env:CONDA_PREFIX "python.exe"
         if (Test-Path $condaPython) {
@@ -59,6 +64,8 @@ function Invoke-ExternalCommandCapture {
         [string]$FilePath,
         [string[]]$ArgumentList
     )
+    # Start-Process + redirected temp files avoids PowerShell stream formatting differences and
+    # gives stable stdout/stderr capture for Windows subprocesses that do not behave well in pipelines.
     $stdoutPath = [System.IO.Path]::GetTempFileName()
     $stderrPath = [System.IO.Path]::GetTempFileName()
     try {
@@ -120,25 +127,6 @@ function Ensure-Pytest {
     return ($result.AllOutput | Select-Object -Last 1).ToString().Trim()
 }
 
-function Write-PytestConfig {
-    param([string]$RunRoot)
-    $pytestIni = Join-Path $RunRoot "pytest.ini"
-    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-    [System.IO.File]::WriteAllLines($pytestIni, @(
-        '[pytest]',
-        'addopts = --import-mode=importlib',
-        '  -k "not _high_cost and not _skip"',
-        '  --ignore=examples',
-        '  --ignore-glob="*_slow*.py"',
-        '  --ignore-glob="*test_kproxy*.py"',
-        '  --ignore-glob="*test_proxy*.py"',
-        '  --ignore-glob="*test_bz*"',
-        '  --ignore-glob="*pbc/cc/test/*test_h_*.py"',
-        '  --ignore-glob="*test_ks_noimport*.py"'
-    ), $utf8NoBom)
-    return $pytestIni
-}
-
 function Get-RelativePath {
     param(
         [string]$BasePath,
@@ -156,27 +144,20 @@ function Get-RelativePath {
     return $relative -replace '/', [System.IO.Path]::DirectorySeparatorChar
 }
 
-function Get-LogicalPath {
-    param(
-        [string]$RepoRoot,
-        [string]$TargetPath
-    )
-    return Get-RelativePath -BasePath $RepoRoot -TargetPath $TargetPath
-}
-
 function Stage-TestDirectory {
     param(
         [string]$SourceDirectory,
         [string]$RunRoot,
         [string]$RepoRoot
     )
-    $relative = Get-LogicalPath -RepoRoot $RepoRoot -TargetPath $SourceDirectory
+    $relative = Get-RelativePath -BasePath $RepoRoot -TargetPath $SourceDirectory
     $stageRoot = Join-Path $RunRoot "tests"
+    # Run tests from a staged copy so installed-wheel verification cannot import helpers or packages
+    # from the source tree by accident, which is easier to trip over on Windows than on Linux/macOS.
     $stagedDirectory = Join-Path $stageRoot (Sanitize-Name $relative)
     New-Item -ItemType Directory -Path $stagedDirectory -Force | Out-Null
     Copy-Item -Path (Join-Path $SourceDirectory '*') -Destination $stagedDirectory -Recurse -Force
     return [pscustomobject]@{
-        source_directory = $SourceDirectory
         staged_directory = $stagedDirectory
         logical_directory = $relative
     }
@@ -221,7 +202,7 @@ function Get-PytestNodeGroups {
         if (-not $groupTable.ContainsKey($sourceDirectory)) {
             $groupTable[$sourceDirectory] = New-Object System.Collections.Generic.List[object]
         }
-        $logicalPath = Get-LogicalPath -RepoRoot $RepoRoot -TargetPath $sourcePath
+        $logicalPath = Get-RelativePath -BasePath $RepoRoot -TargetPath $sourcePath
         $relativeFile = Get-RelativePath -BasePath $sourceDirectory -TargetPath $sourcePath
         $groupTable[$sourceDirectory].Add([pscustomobject]@{
             logical_nodeid = $logicalPath + $parsed.suffix
@@ -237,18 +218,6 @@ function Get-PytestNodeGroups {
                 nodeids = @($_.Value)
             }
         }
-}
-
-function Get-PytestNodeGroupTable {
-    param(
-        [string]$RepoRoot,
-        [string[]]$ConfiguredNodeIds
-    )
-    $table = @{}
-    foreach ($group in (Get-PytestNodeGroups -RepoRoot $RepoRoot -ConfiguredNodeIds $ConfiguredNodeIds)) {
-        $table[$group.source_directory] = @($group.nodeids)
-    }
-    return $table
 }
 
 function Get-LatestWheel {
@@ -299,6 +268,8 @@ function Initialize-RunRoot {
     [System.IO.File]::WriteAllLines($configPath, @(
         'pbc_tools_pbc_fft_engine = "NUMPY+BLAS"',
         'scf_hf_SCF_mute_chkfile = True',
+        # Keep PySCF temp files inside the disposable run root so Windows file locking does not
+        # leak leftovers into the checkout and so leftover-file checks stay local to this run.
         'TMPDIR = "./pyscftmpdir"'
     ), $utf8NoBom)
 }
@@ -326,7 +297,6 @@ function Invoke-PytestTargets {
     param(
         [string]$PythonExe,
         [string[]]$Targets,
-        [string[]]$DeselectNodeIds,
         [string]$PytestIni,
         [string]$LogPath
     )
@@ -338,19 +308,23 @@ function Invoke-PytestTargets {
         "-c",
         $PytestIni
     )
-    foreach ($deselectNodeId in $DeselectNodeIds) {
-        $argumentList += @("--deselect", $deselectNodeId)
-    }
     $argumentList += $Targets
-    $result = Invoke-ExternalCommandCapture -FilePath $PythonExe -ArgumentList $argumentList
+    $capturedOutput = New-Object System.Collections.Generic.List[string]
+    & $PythonExe @argumentList 2>&1 | ForEach-Object {
+        $line = $_.ToString()
+        $capturedOutput.Add($line)
+        Write-Host $line
+    }
+    $exitCode = $LASTEXITCODE
     $timer.Stop()
-    $result.AllOutput | Set-Content -Path $LogPath -Encoding UTF8
+    $capturedOutput | Set-Content -Path $LogPath -Encoding UTF8
+    $allOutput = @($capturedOutput)
     return [pscustomobject]@{
-        exit_code = $result.ExitCode
+        exit_code = $exitCode
         duration_seconds = [math]::Round($timer.Elapsed.TotalSeconds, 3)
         log_path = $LogPath
-        status = if ($result.ExitCode -eq 0) { "passed" } else { "failed" }
-        pytest_summary = Get-PytestSummary -OutputLines $result.AllOutput
+        status = if ($exitCode -eq 0) { "passed" } else { "failed" }
+        pytest_summary = Get-PytestSummary -OutputLines $allOutput
     }
 }
 
@@ -475,12 +449,10 @@ try {
     Install-Wheel -PythonExe $PythonExe -WheelPath $wheel.FullName
     $pytestVersion = Ensure-Pytest -PythonExe $PythonExe
 
-    $excludeNodeTable = @{}
     if ($Mode -eq "check") {
         $runItems = @(Get-PytestNodeGroups -RepoRoot $RepoRoot -ConfiguredNodeIds $SelectedPytestNodeIds)
     }
     if ($Mode -eq "full") {
-        $excludeNodeTable = Get-PytestNodeGroupTable -RepoRoot $RepoRoot -ConfiguredNodeIds $FullExcludedPytestNodeIds
         $runItems = @(
             foreach ($testDir in (Get-TestDirectories -RepoRoot $RepoRoot)) {
                 [pscustomobject]@{
@@ -495,12 +467,21 @@ try {
     $logsDir = Join-Path $ReportDir "logs"
     New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
     Initialize-RunRoot -RunRoot $RunRoot
-    $pytestIni = Write-PytestConfig -RunRoot $RunRoot
+    $sourcePytestIni = Join-Path $RepoRoot "pytest.ini"
+    if (-not (Test-Path $sourcePytestIni -PathType Leaf)) {
+        throw "pytest.ini was not found at the repository root: $sourcePytestIni"
+    }
+    $pytestIni = Join-Path $RunRoot "pytest.ini"
+    # Copy the repo config into the staged run root so pytest still uses the shared policy file
+    # while the actual test execution stays isolated from the checkout.
+    Copy-Item -LiteralPath $sourcePytestIni -Destination $pytestIni -Force
 
     $env:OMP_NUM_THREADS = "4"
     $savedPythonPath = $env:PYTHONPATH
     $savedPytestAddopts = $env:PYTEST_ADDOPTS
     $savedPytestDisablePluginAutoload = $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD
+    # Source-tree PYTHONPATH and host-side pytest plugins are common false positives on Windows CI.
+    # Clear both so this run exercises the installed wheel with only the local staged tests.
     Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
     Remove-Item Env:PYTEST_ADDOPTS -ErrorAction SilentlyContinue
     $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD = "1"
@@ -536,7 +517,6 @@ print(json.dumps({"env_name": env_name, "packages": packages}, ensure_ascii=Fals
             $staged = Stage-TestDirectory -SourceDirectory $runItem.source_directory -RunRoot $RunRoot -RepoRoot $RepoRoot
             $logicalTarget = $staged.logical_directory
             $pytestTargets = @($staged.staged_directory)
-            $deselectNodeIds = @()
             $logLabel = $staged.logical_directory
 
             if ($runItem.nodeids.Count -gt 0) {
@@ -554,18 +534,10 @@ print(json.dumps({"env_name": env_name, "packages": packages}, ensure_ascii=Fals
                     $logLabel = $logicalTarget
                 }
             }
-            elseif ($excludeNodeTable.ContainsKey($runItem.source_directory)) {
-                $deselectNodeIds = @(
-                    foreach ($nodeid in $excludeNodeTable[$runItem.source_directory]) {
-                        $stagedFile = Join-Path $staged.staged_directory $nodeid.relative_file
-                        ((Get-RelativePath -BasePath $RunRoot -TargetPath $stagedFile) + $nodeid.suffix).Replace('\', '/')
-                    }
-                )
-            }
 
             $logName = (Sanitize-Name $logLabel) + ".log"
             $logPath = Join-Path $logsDir $logName
-            $pytestResult = Invoke-PytestTargets -PythonExe $PythonExe -Targets $pytestTargets -DeselectNodeIds $deselectNodeIds -PytestIni $pytestIni -LogPath $logPath
+            $pytestResult = Invoke-PytestTargets -PythonExe $PythonExe -Targets $pytestTargets -PytestIni $pytestIni -LogPath $logPath
             $results += [pscustomobject]@{
                 logical_target = $logicalTarget
                 duration_seconds = $pytestResult.duration_seconds
