@@ -14,18 +14,19 @@ param(
     [string]$Mode = "full",
     [string]$PythonExe = "",
     [string]$RepoRoot = "",
-    [string]$ReportDir = ""
+    [string]$ReportDir = "",
+    [ValidateRange(1, 1000)]
+    [int]$Repeats = 1,
+    [string[]]$SelectedPytestNodeIds = @(
+        "pyscf/cc/test/test_eom_gccsd.py::KnownValues::test_ipccsd",
+        "pyscf/pbc/tdscf/test/test_uks.py::DiamondM06::test_tdhf",
+        "pyscf/pbc/tdscf/test/test_rks.py::Diamond::test_hse06_tda",
+        "pyscf/tdscf/test/test_tduks.py::KnownValues::test_analyze"
+    )
 )
 
 $ErrorActionPreference = "Stop"
 $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-
-[string[]]$SelectedPytestNodeIds = @(
-    "pyscf/cc/test/test_eom_gccsd.py::KnownValues::test_ipccsd",
-    "pyscf/pbc/tdscf/test/test_uks.py::DiamondM06::test_tdhf",
-    "pyscf/pbc/tdscf/test/test_rks.py::Diamond::test_hse06_tda",
-    "pyscf/tdscf/test/test_tduks.py::KnownValues::test_analyze"
-)
 
 function Resolve-RepoRoot {
     param([string]$ConfiguredValue)
@@ -191,7 +192,7 @@ function Get-PytestNodeGroups {
         [string]$RepoRoot,
         [string[]]$ConfiguredNodeIds
     )
-    $groupTable = @{}
+    $items = New-Object System.Collections.Generic.List[object]
     foreach ($configuredNodeId in $ConfiguredNodeIds) {
         $parsed = Split-PytestNodeId -NodeId $configuredNodeId
         $sourcePath = (Resolve-Path (Join-Path $RepoRoot $parsed.path_part)).Path
@@ -199,25 +200,18 @@ function Get-PytestNodeGroups {
         if ((Split-Path $sourceDirectory -Leaf) -ne "test") {
             throw "PytestNodeId must point to a file inside a test directory: $configuredNodeId"
         }
-        if (-not $groupTable.ContainsKey($sourceDirectory)) {
-            $groupTable[$sourceDirectory] = New-Object System.Collections.Generic.List[object]
-        }
         $logicalPath = Get-RelativePath -BasePath $RepoRoot -TargetPath $sourcePath
         $relativeFile = Get-RelativePath -BasePath $sourceDirectory -TargetPath $sourcePath
-        $groupTable[$sourceDirectory].Add([pscustomobject]@{
-            logical_nodeid = $logicalPath + $parsed.suffix
-            relative_file = $relativeFile
-            suffix = $parsed.suffix
+        $items.Add([pscustomobject]@{
+            source_directory = $sourceDirectory
+            nodeids = @([pscustomobject]@{
+                logical_nodeid = $logicalPath + $parsed.suffix
+                relative_file = $relativeFile
+                suffix = $parsed.suffix
+            })
         })
     }
-    return $groupTable.GetEnumerator() |
-        Sort-Object Name |
-        ForEach-Object {
-            [pscustomobject]@{
-                source_directory = $_.Key
-                nodeids = @($_.Value)
-            }
-        }
+    return $items | Sort-Object { $_.nodeids[0].logical_nodeid }
 }
 
 function Get-LatestWheel {
@@ -380,8 +374,41 @@ function Write-Reports {
     $mdPath = Join-Path $ReportDir "installed-wheel-report.md"
     $datedJsonPath = Join-Path $ReportDir "installed-wheel-report-$reportStamp.json"
     $datedMdPath = Join-Path $ReportDir "installed-wheel-report-$reportStamp.md"
+    $attemptsPath = Join-Path $ReportDir "attempts.csv"
+    $summaryPath = Join-Path $ReportDir "summary.csv"
     $wheelRelativePath = Get-RelativePath -BasePath $RepoRoot -TargetPath $WheelPath
     $runRootLabel = [System.IO.Path]::GetFileName($RunRoot)
+
+    $attemptRows = @(
+        foreach ($result in $Results) {
+            $resolvedLog = (Resolve-Path $result.log_path).Path
+            [pscustomobject]@{
+                test_id = $result.logical_target
+                attempt = $result.attempt
+                status = $result.status
+                duration_seconds = $result.duration_seconds
+                pytest_summary = $result.pytest_summary
+                relative_log_path = Get-RelativePath -BasePath $RepoRoot -TargetPath $resolvedLog
+            }
+        }
+    )
+    $summaryRows = @(
+        foreach ($group in ($attemptRows | Group-Object test_id | Sort-Object Name)) {
+            $rows = @($group.Group)
+            $failedRows = @($rows | Where-Object status -eq "failed")
+            $firstFailure = $failedRows | Select-Object -First 1
+            [pscustomobject]@{
+                test_id = $group.Name
+                attempts = $rows.Count
+                passes = @($rows | Where-Object status -eq "passed").Count
+                failures = $failedRows.Count
+                average_seconds = [math]::Round(($rows | Measure-Object duration_seconds -Average).Average, 3)
+                first_failure_log = if ($firstFailure) { $firstFailure.relative_log_path } else { "" }
+            }
+        }
+    )
+    $attemptRows | Export-Csv -LiteralPath $attemptsPath -NoTypeInformation -Encoding utf8
+    $summaryRows | Export-Csv -LiteralPath $summaryPath -NoTypeInformation -Encoding utf8
 
     $summary = [pscustomobject]@{
         generated_at = (Get-Date).ToString("s")
@@ -391,22 +418,13 @@ function Write-Reports {
         pytest = $PytestVersion
         run_root = $RunRoot
         environment_name = $ImportInfo.env_name
+        repeat_count = $Repeats
         tmpfile_count = $TmpFileCount
         passed = @($Results | Where-Object status -eq "passed").Count
         failed = @($Results | Where-Object status -eq "failed").Count
         total = @($Results).Count
-        results = @(
-            foreach ($result in $Results) {
-                $resolvedLog = (Resolve-Path $result.log_path).Path
-                [pscustomobject]@{
-                    logical_target = $result.logical_target
-                    status = $result.status
-                    duration_seconds = $result.duration_seconds
-                    pytest_summary = $result.pytest_summary
-                    relative_log_path = Get-RelativePath -BasePath $RepoRoot -TargetPath $resolvedLog
-                }
-            }
-        )
+        results = $attemptRows
+        test_summary = $summaryRows
     }
 
     $summaryJson = $summary | ConvertTo-Json -Depth 5
@@ -422,14 +440,14 @@ function Write-Reports {
     $lines.Add("- pytest: $PytestVersion")
     $lines.Add("- Wheel: $wheelRelativePath")
     $lines.Add("- Run root: $runRootLabel")
+    $lines.Add("- Repeats per target: $Repeats")
     $lines.Add("- Leftover temporary files: $TmpFileCount")
     $lines.Add("- Summary: passed $($summary.passed) / total $($summary.total), failed $($summary.failed)")
     $lines.Add("")
-    $lines.Add("| Target | Status | Seconds | Pytest Summary | Log |")
-    $lines.Add("| --- | --- | ---: | --- | --- |")
-    foreach ($result in $summary.results) {
-        $pytestSummary = if ($result.pytest_summary) { $result.pytest_summary } else { "(no pytest summary captured)" }
-        $lines.Add("| $($result.logical_target) | $($result.status) | $($result.duration_seconds) | $pytestSummary | $($result.relative_log_path) |")
+    $lines.Add("| Target | Attempts | Passes | Failures | Average Seconds | First Failure Log |")
+    $lines.Add("| --- | ---: | ---: | ---: | ---: | --- |")
+    foreach ($result in $summary.test_summary) {
+        $lines.Add("| $($result.test_id) | $($result.attempts) | $($result.passes) | $($result.failures) | $($result.average_seconds) | $($result.first_failure_log) |")
     }
     $lines | Set-Content -Path $mdPath -Encoding UTF8
     $lines | Set-Content -Path $datedMdPath -Encoding UTF8
@@ -508,42 +526,45 @@ print(json.dumps({"env_name": env_name, "packages": packages}, ensure_ascii=Fals
         }
         $importInfo = ($importResult.AllOutput | Select-Object -Last 1 | ConvertFrom-Json)
 
-        $totalTests = $runItems.Count
+        $totalTests = $runItems.Count * $Repeats
         $completedCount = 0
-        foreach ($runItem in $runItems) {
-            $staged = Stage-TestDirectory -SourceDirectory $runItem.source_directory -RunRoot $RunRoot -RepoRoot $RepoRoot
-            $logicalTarget = $staged.logical_directory
-            $pytestTargets = @($staged.staged_directory)
-            $logLabel = $staged.logical_directory
+        for ($attempt = 1; $attempt -le $Repeats; $attempt++) {
+            foreach ($runItem in $runItems) {
+                $staged = Stage-TestDirectory -SourceDirectory $runItem.source_directory -RunRoot $RunRoot -RepoRoot $RepoRoot
+                $logicalTarget = $staged.logical_directory
+                $pytestTargets = @($staged.staged_directory)
+                $logLabel = $staged.logical_directory
 
-            if ($runItem.nodeids.Count -gt 0) {
-                $pytestTargets = @(
-                    foreach ($nodeid in $runItem.nodeids) {
-                        (Join-Path $staged.staged_directory $nodeid.relative_file) + $nodeid.suffix
+                if ($runItem.nodeids.Count -gt 0) {
+                    $pytestTargets = @(
+                        foreach ($nodeid in $runItem.nodeids) {
+                            (Join-Path $staged.staged_directory $nodeid.relative_file) + $nodeid.suffix
+                        }
+                    )
+                    if ($runItem.nodeids.Count -eq 1) {
+                        $logicalTarget = $runItem.nodeids[0].logical_nodeid
+                        $logLabel = $logicalTarget
                     }
-                )
-                if ($runItem.nodeids.Count -eq 1) {
-                    $logicalTarget = $runItem.nodeids[0].logical_nodeid
-                    $logLabel = $logicalTarget
+                    else {
+                        $logicalTarget = "{0} ({1} nodeids)" -f $staged.logical_directory, $runItem.nodeids.Count
+                        $logLabel = $logicalTarget
+                    }
                 }
-                else {
-                    $logicalTarget = "{0} ({1} nodeids)" -f $staged.logical_directory, $runItem.nodeids.Count
-                    $logLabel = $logicalTarget
-                }
-            }
 
-            $logName = (Sanitize-Name $logLabel) + ".log"
-            $logPath = Join-Path $logsDir $logName
-            $pytestResult = Invoke-PytestTargets -PythonExe $PythonExe -Targets $pytestTargets -PytestIni $pytestIni -LogPath $logPath
-            $results += [pscustomobject]@{
-                logical_target = $logicalTarget
-                duration_seconds = $pytestResult.duration_seconds
-                log_path = $pytestResult.log_path
-                status = $pytestResult.status
-                pytest_summary = $pytestResult.pytest_summary
+                $logName = (Sanitize-Name $logLabel) + ".attempt-$attempt.log"
+                $logPath = Join-Path $logsDir $logName
+                $pytestResult = Invoke-PytestTargets -PythonExe $PythonExe -Targets $pytestTargets -PytestIni $pytestIni -LogPath $logPath
+                $results += [pscustomobject]@{
+                    logical_target = $logicalTarget
+                    attempt = $attempt
+                    duration_seconds = $pytestResult.duration_seconds
+                    log_path = $pytestResult.log_path
+                    status = $pytestResult.status
+                    pytest_summary = $pytestResult.pytest_summary
+                }
+                $completedCount += 1
+                Write-TestProgress -CompletedCount $completedCount -TotalCount $totalTests -LogicalDirectory "$logicalTarget (attempt $attempt/$Repeats)" -Status $pytestResult.status -LogPath $pytestResult.log_path
             }
-            $completedCount += 1
-            Write-TestProgress -CompletedCount $completedCount -TotalCount $totalTests -LogicalDirectory $logicalTarget -Status $pytestResult.status -LogPath $pytestResult.log_path
         }
 
         $tmpDir = Join-Path $RunRoot "pyscftmpdir"

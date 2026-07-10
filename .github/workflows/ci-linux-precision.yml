@@ -50,3 +50,67 @@ jobs:
           name: precision-${{ matrix.os }}-py${{ matrix.python-version }}
           path: tmp/precision-results
           if-no-files-found: warn
+
+  precision-windows:
+    continue-on-error: true
+    runs-on: windows-latest
+    timeout-minutes: 360
+    defaults:
+      run:
+        shell: pwsh
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python-version: "3.8"
+            build-env: pyscf-win38
+            test-env: pyscf-win38-test
+          - python-version: "3.12"
+            build-env: pyscf-win312
+            test-env: pyscf-win312-test
+          - python-version: "3.13"
+            build-env: pyscf-win313
+            test-env: pyscf-win313-test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Conda
+        uses: conda-incubator/setup-miniconda@v4
+        with:
+          activate-environment: ""
+          auto-activate: false
+          auto-update-conda: false
+      - name: Set up MSYS2 UCRT64
+        id: msys2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-openblas
+      - name: Run installed-wheel precision tests
+        env:
+          OMP_NUM_THREADS: "4"
+          OPENBLAS_NUM_THREADS: "4"
+          MKL_NUM_THREADS: "4"
+        run: >
+          .\.github\workflows\run_windows_precision_tests.ps1
+          -BuildEnvName ${{ matrix.build-env }}
+          -TestEnvName ${{ matrix.test-env }}
+          -PythonVersion ${{ matrix.python-version }}
+          -RuntimeDllDir "${{ steps.msys2.outputs.msys2-location }}\\ucrt64\\bin"
+      - name: Publish Windows precision summary
+        if: always()
+        run: |
+          if (Test-Path tmp/precision-results/installed-wheel-report.md) {
+            Get-Content tmp/precision-results/installed-wheel-report.md | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+      - name: Upload Windows precision logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: precision-windows-py${{ matrix.python-version }}
+          path: |
+            tmp/precision-results
+            .github/workflows/ci_windows/build-logs/**
+          if-no-files-found: warn
