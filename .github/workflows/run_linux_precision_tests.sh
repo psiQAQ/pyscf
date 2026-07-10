@@ -51,8 +51,16 @@ tests=(
   'pyscf/mcscf/test/test_bz.py::KnownValues::test_mc2step_4o4e'
 )
 
+repeats=10
 results_dir='tmp/precision-results'
-mkdir -p "$results_dir/logs"
+mkdir -p "$results_dir/logs" "$results_dir/environment"
+python -m pip freeze --all > "$results_dir/environment/pip-freeze.txt"
+python -m pip list --format=json > "$results_dir/environment/pip-list.json"
+if ! python -m pip check > "$results_dir/environment/pip-check.txt" 2>&1; then
+    printf 'pip check failed; see pip-check.txt\n' >> "$results_dir/environment/pip-check.txt"
+fi
+python .github/workflows/collect_precision_environment.py "$results_dir/environment/runtime.json"
+printf 'repeat_count=%s\n' "$repeats" > "$results_dir/environment/runner-config.txt"
 printf 'test_id,attempt,exit_code,result,log_file\n' > "$results_dir/attempts.csv"
 printf 'test_id,attempts,passes,failures\n' > "$results_dir/summary.csv"
 
@@ -63,7 +71,7 @@ for test_id in "${tests[@]}"; do
     log_name="${test_id//\//_}"
     log_name="${log_name//:/_}"
 
-    for attempt in {1..5}; do
+    for ((attempt=1; attempt<=repeats; attempt++)); do
         log_file="$results_dir/logs/${log_name}.attempt-${attempt}.log"
         if pytest -q -rA -s -c pytest.ini "$test_id" > "$log_file" 2>&1; then
             exit_code=0
@@ -76,10 +84,10 @@ for test_id in "${tests[@]}"; do
             total_failures=$((total_failures + 1))
         fi
         printf '%s,%s,%s,%s,%s\n' "$test_id" "$attempt" "$exit_code" "$result" "$log_file" >> "$results_dir/attempts.csv"
-        printf '%s attempt %s/5: %s\n' "$test_id" "$attempt" "$result"
+        printf '%s attempt %s/%s: %s\n' "$test_id" "$attempt" "$repeats" "$result"
     done
 
-    printf '%s,5,%s,%s\n' "$test_id" "$passes" "$failures" >> "$results_dir/summary.csv"
+    printf '%s,%s,%s,%s\n' "$test_id" "$repeats" "$passes" "$failures" >> "$results_dir/summary.csv"
 done
 
 {
