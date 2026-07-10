@@ -5,7 +5,7 @@
 # 3. Create an isolated temporary run root with a local PySCF config and temp directory for this CI run only.
 # 4. Copy the shared repo pytest.ini into the run root and scrub host-side pytest/PYTHONPATH overrides.
 # 5. Stage each test directory into the temporary run root so pytest cannot accidentally import from the source tree.
-# 6. Run either the selected PR check nodeids or the full per-directory sweep while streaming pytest output to CI logs.
+# 6. Run either the selected PR check nodeids or the full per-directory sweep and save per-target logs.
 # 7. Record per-target logs and summary reports, then count leftover temp files inside the disposable run root.
 # 8. Fail the job when any verification target fails or when temporary files are left behind after the run.
 #
@@ -309,21 +309,18 @@ function Invoke-PytestTargets {
         $PytestIni
     )
     $argumentList += $Targets
-    $capturedOutput = New-Object System.Collections.Generic.List[string]
-    & $PythonExe @argumentList 2>&1 | ForEach-Object {
-        $line = $_.ToString()
-        $capturedOutput.Add($line)
+    $result = Invoke-ExternalCommandCapture -FilePath $PythonExe -ArgumentList $argumentList
+    $timer.Stop()
+    $result.AllOutput | Set-Content -Path $LogPath -Encoding UTF8
+    foreach ($line in $result.AllOutput) {
         Write-Host $line
     }
-    $exitCode = $LASTEXITCODE
-    $timer.Stop()
-    $capturedOutput | Set-Content -Path $LogPath -Encoding UTF8
-    $allOutput = @($capturedOutput)
+    $allOutput = @($result.AllOutput)
     return [pscustomobject]@{
-        exit_code = $exitCode
+        exit_code = $result.ExitCode
         duration_seconds = [math]::Round($timer.Elapsed.TotalSeconds, 3)
         log_path = $LogPath
-        status = if ($exitCode -eq 0) { "passed" } else { "failed" }
+        status = if ($result.ExitCode -eq 0) { "passed" } else { "failed" }
         pytest_summary = Get-PytestSummary -OutputLines $allOutput
     }
 }
