@@ -17,12 +17,7 @@ param(
     [string]$ReportDir = "",
     [ValidateRange(1, 1000)]
     [int]$Repeats = 1,
-    [string[]]$SelectedPytestNodeIds = @(
-        "pyscf/cc/test/test_eom_gccsd.py::KnownValues::test_ipccsd",
-        "pyscf/pbc/tdscf/test/test_uks.py::DiamondM06::test_tdhf",
-        "pyscf/pbc/tdscf/test/test_rks.py::Diamond::test_hse06_tda",
-        "pyscf/tdscf/test/test_tduks.py::KnownValues::test_analyze"
-    ),
+    [string[]]$SelectedPytestNodeIds = @(),
     [string]$SelectedPytestNodeIdsFile = ""
 )
 
@@ -198,8 +193,8 @@ function Get-PytestNodeGroups {
         $parsed = Split-PytestNodeId -NodeId $configuredNodeId
         $sourcePath = (Resolve-Path (Join-Path $RepoRoot $parsed.path_part)).Path
         $sourceDirectory = Split-Path $sourcePath -Parent
-        if ((Split-Path $sourceDirectory -Leaf) -ne "test") {
-            throw "PytestNodeId must point to a file inside a test directory: $configuredNodeId"
+        if ((Split-Path $sourceDirectory -Leaf) -notmatch "^test($|_)") {
+            throw "PytestNodeId must point to a file inside a test or test_* directory: $configuredNodeId"
         }
         $logicalPath = Get-RelativePath -BasePath $RepoRoot -TargetPath $sourcePath
         $relativeFile = Get-RelativePath -BasePath $sourceDirectory -TargetPath $sourcePath
@@ -466,12 +461,15 @@ try {
     $pytestVersion = Ensure-Pytest -PythonExe $PythonExe
 
     if ($Mode -eq "check") {
+        if (-not $SelectedPytestNodeIdsFile) {
+            $SelectedPytestNodeIdsFile = Join-Path $RepoRoot ".github\workflows\precision-selected-nodeids.txt"
+        }
         if ($SelectedPytestNodeIdsFile) {
             if (-not (Test-Path -LiteralPath $SelectedPytestNodeIdsFile -PathType Leaf)) {
                 throw "Selected pytest node-id file was not found: $SelectedPytestNodeIdsFile"
             }
             $SelectedPytestNodeIds = @(Get-Content -LiteralPath $SelectedPytestNodeIdsFile |
-                Where-Object { $_.Trim() } |
+                Where-Object { $_.Trim() -and -not $_.Trim().StartsWith('#') } |
                 ForEach-Object { $_.Trim() })
         }
         $runItems = @(Get-PytestNodeGroups -RepoRoot $RepoRoot -ConfiguredNodeIds $SelectedPytestNodeIds)
@@ -501,6 +499,8 @@ try {
     Copy-Item -LiteralPath $sourcePytestIni -Destination $pytestIni -Force
 
     $env:OMP_NUM_THREADS = "4"
+    $env:OPENBLAS_NUM_THREADS = "4"
+    $env:MKL_NUM_THREADS = "4"
     $savedPythonPath = $env:PYTHONPATH
     $savedPytestAddopts = $env:PYTEST_ADDOPTS
     $savedPytestDisablePluginAutoload = $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD

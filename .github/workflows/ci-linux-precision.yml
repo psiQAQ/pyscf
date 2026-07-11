@@ -18,6 +18,10 @@ jobs:
   precision:
     if: ${{ inputs['run-linux-macos'] }}
     runs-on: ${{ matrix.os }}
+    env:
+      OMP_NUM_THREADS: "4"
+      OPENBLAS_NUM_THREADS: "4"
+      MKL_NUM_THREADS: "4"
     strategy:
       fail-fast: false
       matrix:
@@ -33,7 +37,7 @@ jobs:
           - os: macos-latest
             python-version: "3.13"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v6
         with:
@@ -48,6 +52,12 @@ jobs:
           ".github/workflows/ci_${ci_os}/deps_apt.sh"
           ".github/workflows/ci_${ci_os}/python_deps.sh"
           ".github/workflows/ci_${ci_os}/build_pyscf.sh"
+      - name: Capture build environment
+        run: |
+          python .github/workflows/collect_precision_environment.py --snapshot-dir tmp/precision-results/environment/build
+          printf 'phase=build\nOMP_NUM_THREADS=%s\nOPENBLAS_NUM_THREADS=%s\nMKL_NUM_THREADS=%s\n' \
+            "$OMP_NUM_THREADS" "$OPENBLAS_NUM_THREADS" "$MKL_NUM_THREADS" \
+            > tmp/precision-results/environment/build/runner-config.txt
       - name: Run precision tests
         run: bash ./.github/workflows/run_linux_precision_tests.sh
       - name: Publish precision summary
@@ -69,6 +79,10 @@ jobs:
     continue-on-error: true
     runs-on: windows-latest
     timeout-minutes: 360
+    env:
+      OMP_NUM_THREADS: "4"
+      OPENBLAS_NUM_THREADS: "4"
+      MKL_NUM_THREADS: "4"
     defaults:
       run:
         shell: pwsh
@@ -100,10 +114,6 @@ jobs:
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-openblas
       - name: Run installed-wheel precision tests
-        env:
-          OMP_NUM_THREADS: "4"
-          OPENBLAS_NUM_THREADS: "4"
-          MKL_NUM_THREADS: "4"
         run: >
           .\.github\workflows\run_windows_precision_tests.ps1
           -BuildEnvName ${{ matrix.build-env }}

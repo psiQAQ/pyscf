@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make all precision runs consume one node-ID file and emit comparable build/test artifacts while normal Windows check remains a single-pass installed-wheel gate.
+**Goal:** Make all selected precision runs consume one node-ID file, execute once, and emit comparable build/test artifacts.
 
 **Architecture:** A canonical text file supplies node IDs to Bash and PowerShell. The existing Python environment collector becomes the shared snapshot writer for `environment/build/` and `environment/test/`. Windows keeps its Conda/MSYS2 and staged installed-wheel test flow; workflows only stage outputs under the common artifact root.
 
@@ -11,8 +11,7 @@
 ## Global Constraints
 
 - No dependency installation or Python-environment mutation in the local checkout.
-- Normal Windows `check` repeats each selected node exactly once.
-- Manual precision triage keeps ten repeats.
+- Every selected test repeats exactly once in this batch.
 - Normal Windows `full` remains disabled.
 - No normal Windows artifact includes `dist/*.whl`.
 
@@ -29,7 +28,7 @@
 
 - [ ] Write a static guard that reads the canonical file, rejects duplicates and blank node IDs, and asserts both runners reference `precision-selected-nodeids.txt`.
 - [ ] Run the guard before changes and confirm it fails because the canonical file is absent.
-- [ ] Move the existing 29 IDs into the text file; have Bash and PowerShell copy that file to `tmp/precision-results/selected-nodeids.txt` and parse it.
+- [ ] Move the existing 29 IDs into the text file; have Bash and PowerShell copy that file to `tmp/precision-results/selected-nodeids.txt`, parse it, and run each node once.
 - [ ] Make Windows check resolve the canonical file by default, while accepting the copied artifact file from precision triage.
 - [ ] Re-run the guard and parser checks for both PowerShell scripts.
 
