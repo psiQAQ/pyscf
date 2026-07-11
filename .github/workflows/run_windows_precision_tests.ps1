@@ -64,7 +64,7 @@ $buildCondaList | Set-Content -LiteralPath (Join-Path $BuildEnvironmentDir "cond
     "python_version=$PythonVersion",
     "build_environment=$BuildEnvName",
     "test_environment=$TestEnvName",
-    "repeat_count=1",
+    "repeat_count=100",
     "OMP_NUM_THREADS=$env:OMP_NUM_THREADS",
     "OPENBLAS_NUM_THREADS=$env:OPENBLAS_NUM_THREADS",
     "MKL_NUM_THREADS=$env:MKL_NUM_THREADS"
@@ -97,7 +97,7 @@ try {
         "-ExecutionPolicy", "Bypass",
         "-File", $VerifyScript,
         "-Mode", "check",
-        "-Repeats", "1",
+        "-Repeats", "100",
         "-ReportDir", $ResultsDir,
         "-SelectedPytestNodeIdsFile", $NodeIdFile
     )
@@ -118,7 +118,7 @@ try {
         "python_version=$PythonVersion",
         "build_environment=$BuildEnvName",
         "test_environment=$TestEnvName",
-        "repeat_count=1",
+        "repeat_count=100",
         "verification_exit_code=$verificationExit",
         "OMP_NUM_THREADS=$env:OMP_NUM_THREADS",
         "OPENBLAS_NUM_THREADS=$env:OPENBLAS_NUM_THREADS",

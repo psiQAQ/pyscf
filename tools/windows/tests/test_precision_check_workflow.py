@@ -63,9 +63,9 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         self.assertFalse((WORKFLOW_DIR / 'ci-precision-diagnostics.yml').exists())
         self.assertFalse((WORKFLOW_DIR / 'precision_experiments.py').exists())
 
-    def test_runners_default_to_one_attempt(self):
-        self.assertIn('repeats=1', UNIX_RUNNER.read_text(encoding='utf-8'))
-        self.assertIn('"-Repeats", "1"', WINDOWS_RUNNER.read_text(encoding='utf-8'))
+    def test_runners_repeat_each_selected_test_one_hundred_times(self):
+        self.assertIn('repeats=100', UNIX_RUNNER.read_text(encoding='utf-8'))
+        self.assertIn('"-Repeats", "100"', WINDOWS_RUNNER.read_text(encoding='utf-8'))
 
 
 if __name__ == '__main__':

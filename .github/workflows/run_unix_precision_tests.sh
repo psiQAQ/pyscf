@@ -9,7 +9,7 @@ export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
 ulimit -s 20000
 
 node_id_source='.github/workflows/precision-selected-nodeids.txt'
-repeats=1
+repeats=100
 results_dir='tmp/precision-results'
 test_environment_dir="$results_dir/environment/test"
 
