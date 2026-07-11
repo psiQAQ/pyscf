@@ -53,6 +53,8 @@ $CollectorScript = Join-Path $PSScriptRoot "collect_precision_environment.py"
 
 Remove-Item -LiteralPath $ResultsDir -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Path $EnvironmentDir -Force | Out-Null
+$NodeIdFile = Join-Path $ResultsDir "selected-nodeids.txt"
+$SelectedPytestNodeIds | Set-Content -LiteralPath $NodeIdFile -Encoding utf8
 
 & (Join-Path $WindowsWorkflowDir "create_build_env.ps1") `
     -BuildEnvName $BuildEnvName `
@@ -91,8 +93,8 @@ try {
         "-Mode", "check",
         "-Repeats", "10",
         "-ReportDir", $ResultsDir,
-        "-SelectedPytestNodeIds"
-    ) + $SelectedPytestNodeIds
+        "-SelectedPytestNodeIdsFile", $NodeIdFile
+    )
     conda run @verifyArgs
     $verificationExit = $LASTEXITCODE
 

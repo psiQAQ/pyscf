@@ -62,9 +62,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - python-version: "3.8"
-            build-env: pyscf-win38
-            test-env: pyscf-win38-test
           - python-version: "3.12"
             build-env: pyscf-win312
             test-env: pyscf-win312-test

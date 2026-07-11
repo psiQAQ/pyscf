@@ -22,7 +22,8 @@ param(
         "pyscf/pbc/tdscf/test/test_uks.py::DiamondM06::test_tdhf",
         "pyscf/pbc/tdscf/test/test_rks.py::Diamond::test_hse06_tda",
         "pyscf/tdscf/test/test_tduks.py::KnownValues::test_analyze"
-    )
+    ),
+    [string]$SelectedPytestNodeIdsFile = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -465,6 +466,14 @@ try {
     $pytestVersion = Ensure-Pytest -PythonExe $PythonExe
 
     if ($Mode -eq "check") {
+        if ($SelectedPytestNodeIdsFile) {
+            if (-not (Test-Path -LiteralPath $SelectedPytestNodeIdsFile -PathType Leaf)) {
+                throw "Selected pytest node-id file was not found: $SelectedPytestNodeIdsFile"
+            }
+            $SelectedPytestNodeIds = @(Get-Content -LiteralPath $SelectedPytestNodeIdsFile |
+                Where-Object { $_.Trim() } |
+                ForEach-Object { $_.Trim() })
+        }
         $runItems = @(Get-PytestNodeGroups -RepoRoot $RepoRoot -ConfiguredNodeIds $SelectedPytestNodeIds)
     }
     if ($Mode -eq "full") {
