@@ -8,6 +8,10 @@ param(
     [Parameter(Mandatory)]
     [ValidatePattern("^\d+\.\d+$")]
     [string]$PythonVersion,
+    [ValidateRange(0, 99)]
+    [int]$ShardIndex = 0,
+    [ValidateRange(1, 100)]
+    [int]$ShardCount = 1,
     [string]$RuntimeDllDir = ""
 )
 
@@ -25,10 +29,24 @@ $CollectorScript = Join-Path $PSScriptRoot "collect_precision_environment.py"
 if (-not (Test-Path -LiteralPath $NodeIdSource -PathType Leaf)) {
     throw "Precision node-ID file was not found: $NodeIdSource"
 }
+if ($ShardIndex -ge $ShardCount) {
+    throw "Precision shard index must be smaller than shard count: $ShardIndex/$ShardCount"
+}
+$allNodeIds = @(Get-Content -LiteralPath $NodeIdSource | Where-Object { $_.Trim() -and -not $_.Trim().StartsWith("#") })
+$selectedNodeIds = @(
+    for ($index = 0; $index -lt $allNodeIds.Count; $index++) {
+        if ($index % $ShardCount -eq $ShardIndex) {
+            $allNodeIds[$index]
+        }
+    }
+)
+if ($selectedNodeIds.Count -eq 0) {
+    throw "Precision shard contains no node IDs: $ShardIndex/$ShardCount"
+}
 
 Remove-Item -LiteralPath $ResultsDir -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Path $BuildEnvironmentDir, $TestEnvironmentDir -Force | Out-Null
-Copy-Item -LiteralPath $NodeIdSource -Destination $NodeIdFile -Force
+$selectedNodeIds | Set-Content -LiteralPath $NodeIdFile -Encoding utf8
 
 & (Join-Path $WindowsWorkflowDir "create_build_env.ps1") `
     -BuildEnvName $BuildEnvName `
@@ -65,6 +83,8 @@ $buildCondaList | Set-Content -LiteralPath (Join-Path $BuildEnvironmentDir "cond
     "build_environment=$BuildEnvName",
     "test_environment=$TestEnvName",
     "repeat_count=100",
+    "shard_index=$ShardIndex",
+    "shard_count=$ShardCount",
     "OMP_NUM_THREADS=$env:OMP_NUM_THREADS",
     "OPENBLAS_NUM_THREADS=$env:OPENBLAS_NUM_THREADS",
     "MKL_NUM_THREADS=$env:MKL_NUM_THREADS"
@@ -119,6 +139,8 @@ try {
         "build_environment=$BuildEnvName",
         "test_environment=$TestEnvName",
         "repeat_count=100",
+        "shard_index=$ShardIndex",
+        "shard_count=$ShardCount",
         "verification_exit_code=$verificationExit",
         "OMP_NUM_THREADS=$env:OMP_NUM_THREADS",
         "OPENBLAS_NUM_THREADS=$env:OPENBLAS_NUM_THREADS",

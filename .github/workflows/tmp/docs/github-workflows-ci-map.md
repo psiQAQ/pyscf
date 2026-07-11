@@ -12,6 +12,8 @@
 
 暂时排除 macOS 3.12 和 Windows 3.8。Precision check 使用 `fail-fast: false`，但不允许失败；一个组合失败不会取消其他组合，最终工作流仍会失败。
 
+100次阶段按 node ID 分成3个分片；每个平台/版本产生3个 job，共21个 job。每个 node ID 只属于一个分片，并在该分片中完整运行100次。
+
 ## Full 验证
 
 ### Linux 与 macOS
@@ -108,6 +110,8 @@ Windows 另外包含：
 - `.github/workflows/ci_windows/build-logs/`
 
 下载7份 artifact 后，可以比较失败频率、完整错误日志、包版本、编译环境、原生库及 wheel 信息，并据此生成跨平台分析报告。
+
+100次分片运行会产生21份 artifact，名称带 `shard-0`、`shard-1` 或 `shard-2`。同一平台的3份 `summary.csv` 和 `attempts.csv` 合并后覆盖原来的29项，每项仍有100次记录。
 
 ## 文件职责
 

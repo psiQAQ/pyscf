@@ -10,6 +10,8 @@ ulimit -s 20000
 
 node_id_source='.github/workflows/precision-selected-nodeids.txt'
 repeats=100
+shard_count=${PRECISION_SHARD_COUNT:-1}
+shard_index=${PRECISION_SHARD_INDEX:-0}
 results_dir='tmp/precision-results'
 test_environment_dir="$results_dir/environment/test"
 
@@ -28,9 +30,20 @@ if (( ${#tests[@]} == 0 )); then
     printf 'Precision node-ID file is empty: %s\n' "$node_id_source" >&2
     exit 2
 fi
+if (( shard_count < 1 || shard_index < 0 || shard_index >= shard_count )); then
+    printf 'Invalid precision shard %s/%s\n' "$shard_index" "$shard_count" >&2
+    exit 2
+fi
+all_tests=("${tests[@]}")
+tests=()
+for ((index=0; index<${#all_tests[@]}; index++)); do
+    if (( index % shard_count == shard_index )); then
+        tests+=("${all_tests[index]}")
+    fi
+done
 
 mkdir -p pyscftmpdir "$results_dir/logs" "$test_environment_dir"
-cp "$node_id_source" "$results_dir/selected-nodeids.txt"
+printf '%s\n' "${tests[@]}" > "$results_dir/selected-nodeids.txt"
 printf '%s\n' \
   'pbc_tools_pbc_fft_engine = "NUMPY+BLAS"' \
   "dftd3_DFTD3PATH = './pyscf/lib/deps/lib'" \
@@ -38,8 +51,8 @@ printf '%s\n' \
   'TMPDIR = "./pyscftmpdir"' > .pyscf_conf.py
 
 python .github/workflows/collect_precision_environment.py --snapshot-dir "$test_environment_dir"
-printf 'repeat_count=%s\nOMP_NUM_THREADS=%s\nOPENBLAS_NUM_THREADS=%s\nMKL_NUM_THREADS=%s\n' \
-  "$repeats" "$OMP_NUM_THREADS" "$OPENBLAS_NUM_THREADS" "$MKL_NUM_THREADS" \
+printf 'repeat_count=%s\nshard_index=%s\nshard_count=%s\nOMP_NUM_THREADS=%s\nOPENBLAS_NUM_THREADS=%s\nMKL_NUM_THREADS=%s\n' \
+  "$repeats" "$shard_index" "$shard_count" "$OMP_NUM_THREADS" "$OPENBLAS_NUM_THREADS" "$MKL_NUM_THREADS" \
   > "$test_environment_dir/runner-config.txt"
 
 write_csv_row() {

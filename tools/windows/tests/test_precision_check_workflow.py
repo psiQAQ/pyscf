@@ -25,22 +25,12 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         self.assertIn('fail-fast: false', text)
         self.assertNotIn('continue-on-error', text)
 
-    def test_check_workflow_has_exact_seven_matrix_combinations(self):
+    def test_check_workflow_has_seven_platform_version_combinations(self):
         text = WORKFLOW.read_text(encoding='utf-8')
-        combinations = (
-            ('ubuntu-latest', '3.8'),
-            ('ubuntu-latest', '3.12'),
-            ('ubuntu-latest', '3.13'),
-            ('macos-latest', '3.8'),
-            ('macos-latest', '3.13'),
-            ('windows-latest', '3.12'),
-            ('windows-latest', '3.13'),
-        )
-        for os_name, python_version in combinations:
-            entry = f'- os: {os_name}\n            python-version: "{python_version}"'
-            self.assertEqual(text.count(entry), 1, entry)
-        self.assertNotIn('- os: macos-latest\n            python-version: "3.12"', text)
-        self.assertNotIn('- os: windows-latest\n            python-version: "3.8"', text)
+        self.assertIn('os: [ubuntu-latest, macos-latest]', text)
+        self.assertIn('python-version: ["3.8", "3.12", "3.13"]', text)
+        self.assertIn('- os: macos-latest\n            python-version: "3.12"', text)
+        self.assertIn('python-version: ["3.12", "3.13"]', text)
 
     def test_check_workflow_uses_isolated_platform_runners(self):
         text = WORKFLOW.read_text(encoding='utf-8')
@@ -66,6 +56,22 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
     def test_runners_repeat_each_selected_test_one_hundred_times(self):
         self.assertIn('repeats=100', UNIX_RUNNER.read_text(encoding='utf-8'))
         self.assertIn('"-Repeats", "100"', WINDOWS_RUNNER.read_text(encoding='utf-8'))
+
+    def test_workflow_splits_each_platform_into_three_nodeid_shards(self):
+        text = WORKFLOW.read_text(encoding='utf-8')
+        self.assertEqual(text.count('shard: [0, 1, 2]'), 2)
+        self.assertIn('PRECISION_SHARD_INDEX: ${{ matrix.shard }}', text)
+        self.assertIn('-ShardIndex ${{ matrix.shard }}', text)
+        self.assertIn('-ShardCount 3', text)
+        self.assertIn('-shard-${{ matrix.shard }}', text)
+
+    def test_runners_write_only_the_nodeids_assigned_to_the_shard(self):
+        unix = UNIX_RUNNER.read_text(encoding='utf-8')
+        windows = WINDOWS_RUNNER.read_text(encoding='utf-8')
+        self.assertIn('index % shard_count == shard_index', unix)
+        self.assertIn('printf \'%s\\n\' "${tests[@]}" > "$results_dir/selected-nodeids.txt"', unix)
+        self.assertIn('$index % $ShardCount -eq $ShardIndex', windows)
+        self.assertIn('$selectedNodeIds | Set-Content -LiteralPath $NodeIdFile', windows)
 
 
 if __name__ == '__main__':
