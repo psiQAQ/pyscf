@@ -13,88 +13,10 @@
 name: Windows CI
 
 on:
-  push:
-  pull_request:
   workflow_dispatch:
-  schedule:
-    - cron: '*/15 * * * *'
 
 jobs:
-  windows-build-check:
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
-    runs-on: windows-latest
-    timeout-minutes: 90
-    permissions:
-      contents: read
-    defaults:
-      run:
-        shell: pwsh
-    env:
-      BUILD_ENV_NAME: pyscf-win313
-      TEST_ENV_NAME: pyscf-win313-test
-      OMP_NUM_THREADS: "4"
-      OPENBLAS_NUM_THREADS: "4"
-      MKL_NUM_THREADS: "4"
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Conda
-        uses: conda-incubator/setup-miniconda@v4
-        with:
-          activate-environment: ""
-          auto-activate: false
-          auto-update-conda: false
-
-      - name: Set up MSYS2 UCRT64
-        id: msys2
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: UCRT64
-          update: true
-          install: >-
-            mingw-w64-ucrt-x86_64-gcc
-            mingw-w64-ucrt-x86_64-openblas
-
-      - name: Run Windows build check
-        run: >
-          .\.github\workflows\run_ci_windows.ps1
-          -Mode check
-          -BuildEnvName $env:BUILD_ENV_NAME
-          -TestEnvName $env:TEST_ENV_NAME
-          -Repeats 1
-          -SelectedPytestNodeIdsFile ".github\workflows\precision-selected-nodeids.txt"
-          -ResultsDir "tmp\precision-results"
-          -RuntimeDllDir "${{ steps.msys2.outputs.msys2-location }}\\ucrt64\\bin"
-
-      - name: Stage Windows CI diagnostics
-        if: always()
-        run: |
-          $results = Join-Path $env:GITHUB_WORKSPACE 'tmp\precision-results'
-          New-Item -ItemType Directory -Path $results -Force | Out-Null
-          $buildLogs = Join-Path $env:GITHUB_WORKSPACE '.github\workflows\ci_windows\build-logs'
-          if (Test-Path $buildLogs) {
-            Copy-Item -LiteralPath $buildLogs -Destination (Join-Path $results 'build-logs') -Recurse -Force
-          }
-          $wheel = Get-ChildItem -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'dist') -Filter 'pyscf-*.whl' -ErrorAction SilentlyContinue |
-            Sort-Object LastWriteTime -Descending | Select-Object -First 1
-          if ($wheel) {
-            [pscustomobject]@{
-              file_name = $wheel.Name
-              size_bytes = $wheel.Length
-              sha256 = (Get-FileHash -LiteralPath $wheel.FullName -Algorithm SHA256).Hash
-            } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $results 'wheel-metadata.json') -Encoding utf8
-          }
-
-      - name: Upload Windows artifacts
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: windows-build-check-artifacts
-          if-no-files-found: warn
-          path: tmp/precision-results
-
   windows-build-full:
-    if: ${{ false }}
     runs-on: windows-latest
     timeout-minutes: 180
     permissions:

@@ -66,7 +66,10 @@ def hash_file(path):
 
 
 def native_libraries(pyscf_module):
-    libdir = Path(pyscf_module.__file__).resolve().parent / 'lib'
+    module_path = getattr(pyscf_module, '__file__', None)
+    if not module_path:
+        return []
+    libdir = Path(module_path).resolve().parent / 'lib'
     linker = 'otool' if platform.system() == 'Darwin' else 'ldd'
     libraries = []
     for path in sorted(libdir.glob('*')):

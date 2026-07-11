@@ -89,14 +89,18 @@ class VerifyInstalledWheelScriptTests(unittest.TestCase):
 
     def test_script_supports_full_and_check_modes(self):
         text = VERIFY_WHEEL.read_text(encoding="utf-8")
+        selected_nodeids = (REPO_ROOT / ".github" / "workflows" / "precision-selected-nodeids.txt").read_text(
+            encoding="utf-8"
+        )
         self.assertIn('[ValidateSet("full", "check")]', text)
         self.assertIn("[string[]]$SelectedPytestNodeIds", text)
         self.assertIn('if ($Mode -eq "check")', text)
         self.assertIn('if ($Mode -eq "full")', text)
-        self.assertIn("test_eom_gccsd.py::KnownValues::test_ipccsd", text)
-        self.assertIn("test_rks.py::Diamond::test_hse06_tda", text)
-        self.assertIn("test_tduks.py::KnownValues::test_analyze", text)
-        self.assertIn("test_uks.py::DiamondM06::test_tdhf", text)
+        self.assertIn("precision-selected-nodeids.txt", text)
+        self.assertIn("test_eom_gccsd.py::KnownValues::test_ipccsd", selected_nodeids)
+        self.assertIn("test_rks.py::Diamond::test_hse06_tda", selected_nodeids)
+        self.assertIn("test_tduks.py::KnownValues::test_analyze", selected_nodeids)
+        self.assertIn("test_uks.py::DiamondM06::test_tdhf", selected_nodeids)
         self.assertNotIn("FullExcludedPytestNodeIds", text)
         self.assertNotIn("--deselect", text)
 
