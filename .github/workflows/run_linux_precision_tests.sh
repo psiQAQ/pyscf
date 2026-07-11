@@ -17,7 +17,13 @@ if [[ ! -s "$node_id_source" ]]; then
     printf 'Missing precision node-ID file: %s\n' "$node_id_source" >&2
     exit 2
 fi
-mapfile -t tests < <(sed -e '/^[[:space:]]*$/d' -e '/^[[:space:]]*#/d' "$node_id_source")
+tests=()
+while IFS= read -r test_id || [[ -n "$test_id" ]]; do
+    case "$test_id" in
+        ''|'#'*) continue ;;
+    esac
+    tests+=("$test_id")
+done < "$node_id_source"
 if (( ${#tests[@]} == 0 )); then
     printf 'Precision node-ID file is empty: %s\n' "$node_id_source" >&2
     exit 2
