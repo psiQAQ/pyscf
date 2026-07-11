@@ -1,9 +1,22 @@
 name: Precision triage
 
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+    inputs:
+      run-linux-macos:
+        description: Run the Linux/macOS source-build matrix
+        required: false
+        type: boolean
+        default: true
+      run-windows:
+        description: Run the Windows installed-wheel matrix
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   precision:
+    if: ${{ inputs['run-linux-macos'] }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -52,6 +65,7 @@ jobs:
           if-no-files-found: warn
 
   precision-windows:
+    if: ${{ inputs['run-windows'] }}
     continue-on-error: true
     runs-on: windows-latest
     timeout-minutes: 360
