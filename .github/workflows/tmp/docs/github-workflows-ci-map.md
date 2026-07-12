@@ -8,11 +8,12 @@
 | --- | --- | --- | --- | --- |
 | Full | Linux 3.8/3.12、Linux aarch64 3.9、macOS 3.13 | `workflow_dispatch` | 源码构建后的完整测试 | `ci.yml` |
 | Windows full | Windows 3.13 | `workflow_dispatch` | 干净环境中安装 wheel 后的完整测试 | `ci-windows.yml` |
-| Precision check | Linux 3.8/3.12/3.13、macOS 3.8/3.13、Windows 3.12/3.13 | `push`、`pull_request`、`workflow_dispatch` | `precision-selected-nodeids.txt` 中的29项测试 | `ci-precision-check.yml` |
+| Precision check | Linux 3.8/3.12/3.13、macOS 3.8/3.13、Windows 3.12/3.13 | `push`、`pull_request`、`workflow_dispatch` | `precision-selected-nodeids.txt` 中的10项待排查测试 | `ci-precision-check.yml` |
+| Precision diagnostics | 同上，可按平台筛选 | `workflow_dispatch` | 选择一个诊断族，保存计算中间量和限量快照 | `ci-precision-diagnostics.yml` |
 
 暂时排除 macOS 3.12 和 Windows 3.8。Precision check 使用 `fail-fast: false`，但不允许失败；一个组合失败不会取消其他组合，最终工作流仍会失败。
 
-100次阶段按 node ID 分成3个分片；每个平台/版本产生3个 job，共21个 job。每个 node ID 只属于一个分片，并在该分片中完整运行100次。
+100次阶段按 node ID 分成3个分片；每个平台/版本产生3个 job，共21个 job。每个 node ID 只属于一个分片，并在该分片中完整运行100次。完成29项筛选实验后，名单已缩减到10项。
 
 ## Full 验证
 
@@ -86,7 +87,13 @@ ci-precision-check.yml
 
 - Windows check 构建 wheel，并在干净测试环境安装后验证。
 - `PYTHONPATH` 在验证期间被清空，避免从源码树导入。
-- 29项名单作为文件传给 installed-wheel 验证器。
+- 10项名单作为文件传给 installed-wheel 验证器。
+
+## Precision diagnostics
+
+`ci-precision-diagnostics.yml` 只允许手动触发，不是 PR gating check。输入选择诊断族、重复次数、平台族和线程数。Unix 复用现有源码构建脚本；Windows 通过 `run_windows_precision_diagnostics.ps1` 构建并安装 wheel，再在清空 `PYTHONPATH` 的测试环境运行同一个 `precision_experiments.py`。
+
+诊断脚本覆盖9个实验族，其中 `eom` 同时覆盖 IP/EA 两个 nodeid。每次尝试写入 JSONL 标量和数组 fingerprint；完整 NPZ 仅保存首个通过样本以及每种失败签名的首个样本。
 
 ## Artifact 内容
 
@@ -119,22 +126,19 @@ Windows 另外包含：
 | --- | --- |
 | `ci.yml` | Linux/macOS full 工作流 |
 | `ci-windows.yml` | Windows full 工作流 |
-| `ci-precision-check.yml` | 三平台29项精度 check |
-| `precision-selected-nodeids.txt` | 三平台共享的29项 node ID |
+| `ci-precision-check.yml` | 三平台10项精度 check |
+| `ci-precision-diagnostics.yml` | 手动、非 gating 的计算路径诊断 |
+| `precision-selected-nodeids.txt` | 三平台共享的10项待排查 node ID |
+| `precision_experiments.py` | 9类诊断入口、中间量与限量快照记录器 |
 | `run_ci.sh`、`run_tests.sh` | Linux/macOS full 调度与测试 |
 | `run_ci_windows.ps1` | Windows full 主调度，保留旧 check 入口 |
 | `run_unix_precision_tests.sh` | Linux/macOS precision check runner |
 | `run_windows_precision_tests.ps1` | Windows precision check runner |
+| `run_windows_precision_diagnostics.ps1` | Windows installed-wheel diagnostics runner |
 | `collect_precision_environment.py` | 三平台环境、包和原生库证据采集 |
 | `ci_linux/`、`ci_macos/` | Unix 平台依赖与源码构建脚本 |
 | `ci_windows/` | Windows 环境、wheel 构建和 installed-wheel 验证脚本 |
 
 ## 暂存内容
 
-`.github/workflows/tmp/` 不会被 GitHub Actions 当作工作流目录加载。当前暂存：
-
-- `ci-precision-diagnostics.yml`
-- `precision_experiments.py`
-- `docs/github-workflows-ci-map.md`
-
-前两个文件保留专项高重复诊断实现，但不参与当前29项 check。
+`.github/workflows/tmp/` 不会被 GitHub Actions 当作工作流目录加载。当前暂存实验原始数据、报告和本文档。diagnostics workflow 与脚本已移回 `.github/workflows/`，可被 GitHub Actions 识别，但仍只接受手动触发。

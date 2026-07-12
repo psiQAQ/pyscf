@@ -1,0 +1,205 @@
+name: Precision diagnostics
+
+on:
+  workflow_dispatch:
+    inputs:
+      experiment:
+        description: Diagnostic family to run
+        required: true
+        type: choice
+        options:
+          - eom
+          - pbc-tdhf
+          - pbc-hse06
+          - pbc-hse03
+          - ucasscf
+          - sa4-newton
+          - sgx
+          - tddft
+          - analyze
+      repeats:
+        description: Attempts per diagnostic family
+        required: true
+        default: "20"
+        type: string
+      platform:
+        description: Platform family
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - ubuntu
+          - macos
+          - windows
+      threads:
+        description: BLAS/OpenMP threads; 4 matches precision check
+        required: true
+        default: "4"
+        type: choice
+        options:
+          - "1"
+          - "4"
+
+jobs:
+  diagnostics-linux:
+    if: inputs.platform == 'all' || inputs.platform == 'ubuntu'
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      DIAGNOSTIC_EXPERIMENT: ${{ inputs.experiment }}
+      DIAGNOSTIC_REPEATS: ${{ inputs.repeats }}
+      OMP_NUM_THREADS: ${{ inputs.threads }}
+      OPENBLAS_NUM_THREADS: ${{ inputs.threads }}
+      MKL_NUM_THREADS: ${{ inputs.threads }}
+      VECLIB_MAXIMUM_THREADS: ${{ inputs.threads }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.8", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install Linux dependencies
+        run: |
+          .github/workflows/ci_linux/deps_apt.sh
+          .github/workflows/ci_linux/python_deps.sh
+          .github/workflows/ci_linux/build_pyscf.sh
+      - name: Run precision diagnostics
+        run: |
+          export PYTHONPATH="$GITHUB_WORKSPACE:${PYTHONPATH:-}"
+          ulimit -s 20000
+          python .github/workflows/precision_experiments.py \
+            --experiment "$DIAGNOSTIC_EXPERIMENT" \
+            --repeats "$DIAGNOSTIC_REPEATS" \
+            --output "tmp/precision-diagnostics/$DIAGNOSTIC_EXPERIMENT"
+      - name: Capture runtime environment
+        if: always()
+        run: |
+          python .github/workflows/collect_precision_environment.py \
+            --snapshot-dir "tmp/precision-diagnostics/$DIAGNOSTIC_EXPERIMENT/environment/runtime"
+      - name: Publish diagnostic summary
+        if: always()
+        run: |
+          summary="tmp/precision-diagnostics/$DIAGNOSTIC_EXPERIMENT/summary.md"
+          if [ -f "$summary" ]; then cat "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
+      - name: Upload Linux diagnostic artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: precision-diagnostics-${{ inputs.experiment }}-ubuntu-py${{ matrix.python-version }}-t${{ inputs.threads }}
+          path: tmp/precision-diagnostics/${{ inputs.experiment }}
+          if-no-files-found: error
+
+  diagnostics-macos:
+    if: inputs.platform == 'all' || inputs.platform == 'macos'
+    runs-on: macos-latest
+    timeout-minutes: 360
+    env:
+      DIAGNOSTIC_EXPERIMENT: ${{ inputs.experiment }}
+      DIAGNOSTIC_REPEATS: ${{ inputs.repeats }}
+      OMP_NUM_THREADS: ${{ inputs.threads }}
+      OPENBLAS_NUM_THREADS: ${{ inputs.threads }}
+      MKL_NUM_THREADS: ${{ inputs.threads }}
+      VECLIB_MAXIMUM_THREADS: ${{ inputs.threads }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.8", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install macOS dependencies
+        run: |
+          .github/workflows/ci_macos/deps_apt.sh
+          .github/workflows/ci_macos/python_deps.sh
+          .github/workflows/ci_macos/build_pyscf.sh
+      - name: Run precision diagnostics
+        run: |
+          export PYTHONPATH="$GITHUB_WORKSPACE:${PYTHONPATH:-}"
+          python .github/workflows/precision_experiments.py \
+            --experiment "$DIAGNOSTIC_EXPERIMENT" \
+            --repeats "$DIAGNOSTIC_REPEATS" \
+            --output "tmp/precision-diagnostics/$DIAGNOSTIC_EXPERIMENT"
+      - name: Capture runtime environment
+        if: always()
+        run: |
+          python .github/workflows/collect_precision_environment.py \
+            --snapshot-dir "tmp/precision-diagnostics/$DIAGNOSTIC_EXPERIMENT/environment/runtime"
+      - name: Publish diagnostic summary
+        if: always()
+        run: |
+          summary="tmp/precision-diagnostics/$DIAGNOSTIC_EXPERIMENT/summary.md"
+          if [ -f "$summary" ]; then cat "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
+      - name: Upload macOS diagnostic artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: precision-diagnostics-${{ inputs.experiment }}-macos-py${{ matrix.python-version }}-t${{ inputs.threads }}
+          path: tmp/precision-diagnostics/${{ inputs.experiment }}
+          if-no-files-found: error
+
+  diagnostics-windows:
+    if: inputs.platform == 'all' || inputs.platform == 'windows'
+    runs-on: windows-latest
+    timeout-minutes: 360
+    env:
+      DIAGNOSTIC_EXPERIMENT: ${{ inputs.experiment }}
+      DIAGNOSTIC_REPEATS: ${{ inputs.repeats }}
+      OMP_NUM_THREADS: ${{ inputs.threads }}
+      OPENBLAS_NUM_THREADS: ${{ inputs.threads }}
+      MKL_NUM_THREADS: ${{ inputs.threads }}
+    defaults:
+      run:
+        shell: pwsh
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v4
+        with:
+          activate-environment: ""
+          auto-activate: false
+          auto-update-conda: false
+      - id: msys2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-openblas
+      - name: Build installed wheel and run diagnostics
+        env:
+          RUNTIME_DLL_DIR: ${{ steps.msys2.outputs.msys2-location }}\ucrt64\bin
+        run: |
+          $tag = "${{ matrix.python-version }}".Replace(".", "")
+          .\.github\workflows\run_windows_precision_diagnostics.ps1 `
+            -BuildEnvName "pyscf-diag-build-$tag" `
+            -TestEnvName "pyscf-diag-test-$tag" `
+            -PythonVersion "${{ matrix.python-version }}" `
+            -Experiment $env:DIAGNOSTIC_EXPERIMENT `
+            -Repeats ([int]$env:DIAGNOSTIC_REPEATS) `
+            -RuntimeDllDir $env:RUNTIME_DLL_DIR
+      - name: Publish diagnostic summary
+        if: always()
+        run: |
+          $summary = "tmp/precision-diagnostics/$env:DIAGNOSTIC_EXPERIMENT/summary.md"
+          if (Test-Path $summary) {
+            Get-Content $summary | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+      - name: Upload Windows diagnostic artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: precision-diagnostics-${{ inputs.experiment }}-windows-py${{ matrix.python-version }}-t${{ inputs.threads }}
+          path: |
+            tmp/precision-diagnostics/${{ inputs.experiment }}
+            .github/workflows/ci_windows/build-logs/**
+          if-no-files-found: error

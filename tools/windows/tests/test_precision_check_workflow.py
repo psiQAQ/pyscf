@@ -7,6 +7,9 @@ WORKFLOW_DIR = REPO_ROOT / '.github' / 'workflows'
 WORKFLOW = WORKFLOW_DIR / 'ci-precision-check.yml'
 UNIX_RUNNER = WORKFLOW_DIR / 'run_unix_precision_tests.sh'
 WINDOWS_RUNNER = WORKFLOW_DIR / 'run_windows_precision_tests.ps1'
+DIAGNOSTICS_WORKFLOW = WORKFLOW_DIR / 'ci-precision-diagnostics.yml'
+DIAGNOSTICS_SCRIPT = WORKFLOW_DIR / 'precision_experiments.py'
+WINDOWS_DIAGNOSTICS_RUNNER = WORKFLOW_DIR / 'run_windows_precision_diagnostics.ps1'
 
 
 class PrecisionCheckWorkflowTests(unittest.TestCase):
@@ -46,12 +49,46 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         self.assertGreaterEqual(text.count('tmp/precision-results'), 2)
         self.assertIn('.github/workflows/ci_windows/build-logs/**', text)
 
-    def test_diagnostics_are_archived_together(self):
+    def test_diagnostics_are_active_and_manual_only(self):
         archive = WORKFLOW_DIR / 'tmp'
-        self.assertTrue((archive / 'ci-precision-diagnostics.yml').exists())
-        self.assertTrue((archive / 'precision_experiments.py').exists())
-        self.assertFalse((WORKFLOW_DIR / 'ci-precision-diagnostics.yml').exists())
-        self.assertFalse((WORKFLOW_DIR / 'precision_experiments.py').exists())
+        self.assertTrue(DIAGNOSTICS_WORKFLOW.exists())
+        self.assertTrue(DIAGNOSTICS_SCRIPT.exists())
+        self.assertTrue(WINDOWS_DIAGNOSTICS_RUNNER.exists())
+        self.assertFalse((archive / 'ci-precision-diagnostics.yml').exists())
+        self.assertFalse((archive / 'precision_experiments.py').exists())
+
+        text = DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')
+        self.assertIn('workflow_dispatch:', text)
+        self.assertNotIn('push:', text)
+        self.assertNotIn('pull_request:', text)
+        self.assertNotIn('schedule:', text)
+        self.assertIn('python .github/workflows/precision_experiments.py', text)
+        self.assertIn('run_windows_precision_diagnostics.ps1', text)
+        self.assertIn('diagnostics-linux:', text)
+        self.assertIn('diagnostics-macos:', text)
+        self.assertIn('diagnostics-windows:', text)
+        self.assertNotIn('matrix.family', text)
+        self.assertIn('DIAGNOSTIC_REPEATS: ${{ inputs.repeats }}', text)
+        self.assertIn('uses: actions/upload-artifact@v7', text)
+        self.assertEqual(text.count('uses: actions/upload-artifact@v7'), 3)
+        self.assertEqual(text.count('if: always()'), 8)
+
+    def test_diagnostics_cover_retained_nodeids_and_snapshot_policy(self):
+        workflow = DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')
+        script = DIAGNOSTICS_SCRIPT.read_text(encoding='utf-8')
+        experiments = (
+            'eom', 'pbc-tdhf', 'pbc-hse06', 'pbc-hse03', 'ucasscf',
+            'sa4-newton', 'sgx', 'tddft', 'analyze',
+        )
+        for experiment in experiments:
+            self.assertIn(f'- {experiment}', workflow)
+            self.assertIn(repr(experiment), script)
+        for nodeid in (WORKFLOW_DIR / 'precision-selected-nodeids.txt').read_text(encoding='utf-8').splitlines():
+            if nodeid.strip():
+                self.assertIn(repr(nodeid), script)
+        self.assertIn('save_snapshot_once', script)
+        self.assertIn('array_metadata', script)
+        self.assertIn("all(record['status'] == 'exception'", script)
 
     def test_runners_repeat_each_selected_test_one_hundred_times(self):
         self.assertIn('repeats=100', UNIX_RUNNER.read_text(encoding='utf-8'))
