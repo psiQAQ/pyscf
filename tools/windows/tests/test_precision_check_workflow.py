@@ -1,4 +1,5 @@
 import pathlib
+import importlib.util
 import unittest
 
 
@@ -13,6 +14,18 @@ WINDOWS_DIAGNOSTICS_RUNNER = WORKFLOW_DIR / 'run_windows_precision_diagnostics.p
 
 
 class PrecisionCheckWorkflowTests(unittest.TestCase):
+    def test_spin_orbital_matrix_uses_valid_numpy_block_layout(self):
+        import numpy
+
+        spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        aa = numpy.eye(2).reshape(1, 2, 1, 2)
+        ab = numpy.ones((1, 2, 1, 3))
+        bb = numpy.eye(3).reshape(1, 3, 1, 3)
+        matrix = module.spin_orbital_a((aa, ab, bb))
+        self.assertEqual(matrix.shape, (5, 5))
+
     def test_check_workflow_replaces_old_precision_workflow(self):
         self.assertTrue(WORKFLOW.exists())
         self.assertFalse((WORKFLOW_DIR / 'ci-linux-precision.yml').exists())

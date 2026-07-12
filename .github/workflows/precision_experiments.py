@@ -706,7 +706,7 @@ def spin_orbital_a(a):
     aa = aa.reshape(noa * nva, noa * nva)
     ab = ab.reshape(noa * nva, nob * nvb)
     bb = bb.reshape(nob * nvb, nob * nvb)
-    return numpy.block(((aa, ab), (ab.conj().T, bb)))
+    return numpy.block([[aa, ab], [ab.conj().T, bb]])
 
 
 def run_pbc_tda(args, recorder, experiment, unrestricted, xc, pseudo, place):
