@@ -57,6 +57,35 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
             self.assertFalse(radi.ATOM_SPECIFIC_TREUTLER_GRIDS)
         self.assertIs(radi.ATOM_SPECIFIC_TREUTLER_GRIDS, original)
 
+    def test_tda_residuals_ignore_scalar_y_amplitudes(self):
+        import numpy
+
+        spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        class FakeTDA:
+            _scf = object()
+            e = (2.0,)
+            xy = (((numpy.asarray([1.0]), numpy.asarray([0.0])), (0, 0)),)
+
+            def gen_vind(self, mf):
+                def vind(vectors):
+                    self.assert_vector_length = len(vectors[0])
+                    return [numpy.asarray(vectors[0]) * 2]
+                return vind, None
+
+        td = FakeTDA()
+        self.assertEqual(module.td_residuals(td), [0.0])
+        self.assertEqual(td.assert_vector_length, 2)
+
+    def test_pbc_tda_status_matches_original_numeric_assertion(self):
+        spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.assertEqual(module.pbc_tda_status(1e-11, 5e-4), 'pass')
+        self.assertEqual(module.pbc_tda_status(1e-3, 5e-4), 'reference_mismatch')
+
     def test_paired_runner_sets_thread_environment_and_separates_outputs(self):
         spec = importlib.util.spec_from_file_location('run_paired_precision_diagnostics', PAIRED_DIAGNOSTICS_RUNNER)
         module = importlib.util.module_from_spec(spec)
