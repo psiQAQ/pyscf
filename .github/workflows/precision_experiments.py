@@ -35,7 +35,12 @@ NODEIDS = {
 }
 
 
+def base_experiment(experiment):
+    return 'sgx' if experiment.startswith('sgx-') else experiment
+
+
 def nodeid_for(experiment, mode):
+    experiment = base_experiment(experiment)
     return NODEIDS.get(f'{experiment}:{mode}', NODEIDS.get(experiment))
 
 
@@ -48,10 +53,11 @@ def nodeid_complete(records, nodeid):
 
 
 def experiment_complete(recorder):
-    prefix = f'{recorder.experiment}:'
+    experiment = base_experiment(recorder.experiment)
+    prefix = f'{experiment}:'
     nodeids = {
         nodeid for name, nodeid in NODEIDS.items()
-        if name == recorder.experiment or name.startswith(prefix)
+        if name == experiment or name.startswith(prefix)
     }
     return all(nodeid_complete(recorder.records, nodeid) for nodeid in nodeids)
 

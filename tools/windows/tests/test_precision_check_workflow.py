@@ -105,6 +105,17 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         spec.loader.exec_module(module)
         self.assertEqual(module.sgx_xcs('sgx'), ('PBE0', 'HSE06', 'WB97X'))
         self.assertEqual(module.sgx_xcs('sgx-hse06'), ('HSE06',))
+        nodeid = module.NODEIDS['sgx']
+        self.assertEqual(module.nodeid_for('sgx-hse06', 'settings-0:HSE06:delta-1e-04'), nodeid)
+
+        class Recorder:
+            experiment = 'sgx-hse06'
+            records = [{'nodeid': nodeid, 'attempt': 1, 'status': 'pass'}]
+
+        recorder = Recorder()
+        self.assertFalse(module.experiment_complete(recorder))
+        recorder.records.append({'nodeid': nodeid, 'attempt': 2, 'status': 'reference_mismatch'})
+        self.assertTrue(module.experiment_complete(recorder))
         workflow = DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')
         for experiment in ('sgx-pbe0', 'sgx-hse06', 'sgx-wb97x'):
             self.assertIn(f'          - {experiment}', workflow)
