@@ -229,7 +229,7 @@ try {
     $env:CMAKE_BUILD_PARALLEL_LEVEL = "8"
     # OpenBLAS is consumed through the MSYS2 import library on Windows; the .dll.a keeps CMake/Ninja
     # linking consistent with the runtime DLLs that are later copied into the wheel payload.
-    $env:CMAKE_CONFIGURE_ARGS = "-G Ninja -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DBLAS_LIBRARIES=$RuntimeDllDir\\..\\lib\\libopenblas.dll.a -DENABLE_XCFUN=ON -DBUILD_XCFUN=ON"
+    $env:CMAKE_CONFIGURE_ARGS = "-G Ninja -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DBLAS_LIBRARIES=$RuntimeDllDir\\..\\lib\\libopenblas.dll.a -DENABLE_XCFUN=ON -DBUILD_XCFUN=ON -DLIBXC_URL=https://gitlab.com/libxc/libxc/-/archive/f4439479220beff707fc071e14345a205c885521/libxc-f4439479220beff707fc071e14345a205c885521.tar.gz"
 
     Copy-RequiredDlls -RuntimeDllDir $RuntimeDllDir -LibDir $LibDir
     $missingSupportDlls = @(Copy-SupportDlls -DepsBinDir $DepsBinDir -LibDir $LibDir -AllowMissing)

@@ -233,8 +233,8 @@ class KnownValues(unittest.TestCase):
     #    rho_b = numpy.array([[4.53272893e-06, 4.18968775e-06,-2.83034672e-06, 2.61832978e-06, 5.63360737e-06, 8.97541777e-07]]).T
     #    e, v = dft.libxc.eval_xc('tpss,', (rho_a, rho_b), spin=1, deriv=1)[:2]
 
-    #TDOO: enable this test when https://gitlab.com/libxc/libxc/-/issues/561 is solved
-    @unittest.skip('hse03 and hse06 fxc have large numerical errors in Libxc')
+    # Enable after the Libxc fix for https://gitlab.com/libxc/libxc/-/issues/561 is released.
+    @unittest.skip('hse03 and hse06 fxc have large numerical errors in Libxc 7.0.0')
     def test_hse06(self):
         ni = dft.numint.NumInt()
         rho = numpy.array([.235, 1.5e-9, 2e-9, 1e-9])[:,None]

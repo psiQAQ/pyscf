@@ -212,6 +212,8 @@ option(ENABLE_LIBXC "Using libxc for XC functional library" ON)
 option(ENABLE_XCFUN "Using xcfun for XC functional library" ON)
 option(BUILD_LIBXC "Download and build libxc library" ON)
 option(BUILD_XCFUN "Download and build xcfun library" ON)
+set(LIBXC_URL "https://gitlab.com/libxc/libxc/-/archive/7.0.0/libxc-7.0.0.tar.gz"
+    CACHE STRING "libxc source archive")
 
 option(ENABLE_LIBXSMM "Using libxsmm" OFF)
 option(BUILD_LIBXSMM "Building libxsmm" OFF)
@@ -230,7 +232,7 @@ if(ENABLE_LIBXC AND BUILD_LIBXC)
   ExternalProject_Add(libxc
     #GIT_REPOSITORY https://gitlab.com/libxc/libxc.git
     #GIT_TAG master
-    URL https://gitlab.com/libxc/libxc/-/archive/7.0.0/libxc-7.0.0.tar.gz
+    URL ${LIBXC_URL}
     PREFIX ${PROJECT_BINARY_DIR}/deps
     INSTALL_DIR ${PROJECT_SOURCE_DIR}/deps
     CMAKE_ARGS -DCMAKE_BUILD_TYPE=RELEASE -DBUILD_SHARED_LIBS=1

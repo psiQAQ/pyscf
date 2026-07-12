@@ -11,6 +11,9 @@ WORKFLOW_DIR = REPO_ROOT / '.github' / 'workflows'
 WORKFLOW = WORKFLOW_DIR / 'ci-precision-check.yml'
 UNIX_RUNNER = WORKFLOW_DIR / 'run_unix_precision_tests.sh'
 LINUX_BUILD_SCRIPT = WORKFLOW_DIR / 'ci_linux' / 'build_pyscf.sh'
+MACOS_BUILD_SCRIPT = WORKFLOW_DIR / 'ci_macos' / 'build_pyscf.sh'
+WINDOWS_BUILD_SCRIPT = WORKFLOW_DIR / 'ci_windows' / 'build_wheel_ci.ps1'
+LIB_CMAKE = REPO_ROOT / 'pyscf' / 'lib' / 'CMakeLists.txt'
 WINDOWS_RUNNER = WORKFLOW_DIR / 'run_windows_precision_tests.ps1'
 DIAGNOSTICS_WORKFLOW = WORKFLOW_DIR / 'ci-precision-diagnostics.yml'
 DIAGNOSTICS_SCRIPT = WORKFLOW_DIR / 'precision_experiments.py'
@@ -26,6 +29,14 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         self.assertIn('--retry-all-errors', text)
         self.assertIn('--output "$archive"', text)
         self.assertIn('tar xzf "$archive"', text)
+
+    def test_precision_builds_use_fixed_libxc_stability_revision(self):
+        revision = 'f4439479220beff707fc071e14345a205c885521'
+        for script in (LINUX_BUILD_SCRIPT, MACOS_BUILD_SCRIPT, WINDOWS_BUILD_SCRIPT):
+            self.assertIn(revision, script.read_text(encoding='utf-8'))
+        cmake = LIB_CMAKE.read_text(encoding='utf-8')
+        self.assertIn('URL ${LIBXC_URL}', cmake)
+        self.assertIn('archive/7.0.0/libxc-7.0.0.tar.gz', cmake)
 
     def test_windows_build_environment_retries_transient_conda_failure(self):
         text = WINDOWS_BUILD_ENV_SCRIPT.read_text(encoding='utf-8')
