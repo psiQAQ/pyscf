@@ -4,14 +4,20 @@ param(
     [Parameter(Mandatory)][ValidatePattern("^\d+\.\d+$")][string]$PythonVersion,
     [Parameter(Mandatory)][string]$Experiment,
     [Parameter(Mandatory)][ValidateRange(1, 1000)][int]$Repeats,
-    [string]$RuntimeDllDir = ""
+    [string]$RuntimeDllDir = "",
+    [switch]$Paired
 )
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $WindowsWorkflowDir = Join-Path $PSScriptRoot "ci_windows"
-$OutputDir = Join-Path $RepoRoot "tmp\precision-diagnostics\$Experiment"
+$OutputDir = if ($Paired) {
+    Join-Path $RepoRoot "tmp\precision-thread-paired\$Experiment"
+} else {
+    Join-Path $RepoRoot "tmp\precision-diagnostics\$Experiment"
+}
 $Script = Join-Path $PSScriptRoot "precision_experiments.py"
+$PairedRunner = Join-Path $PSScriptRoot "run_paired_precision_diagnostics.py"
 $Collector = Join-Path $PSScriptRoot "collect_precision_environment.py"
 
 New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
@@ -47,10 +53,18 @@ $savedPythonPath = $env:PYTHONPATH
 $diagnosticExit = 0
 try {
     Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
-    conda run --no-capture-output -n $TestEnvName python $Script `
-        --experiment $Experiment `
-        --repeats $Repeats `
-        --output $OutputDir
+    if ($Paired) {
+        conda run --no-capture-output -n $TestEnvName python $PairedRunner `
+            --script $Script `
+            --experiment $Experiment `
+            --repeats $Repeats `
+            --output $OutputDir
+    } else {
+        conda run --no-capture-output -n $TestEnvName python $Script `
+            --experiment $Experiment `
+            --repeats $Repeats `
+            --output $OutputDir
+    }
     $diagnosticExit = $LASTEXITCODE
 
     conda run --no-capture-output -n $TestEnvName python $Collector `

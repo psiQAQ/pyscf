@@ -1,5 +1,8 @@
 import pathlib
 import importlib.util
+import json
+import sys
+import tempfile
 import unittest
 
 
@@ -11,6 +14,8 @@ WINDOWS_RUNNER = WORKFLOW_DIR / 'run_windows_precision_tests.ps1'
 DIAGNOSTICS_WORKFLOW = WORKFLOW_DIR / 'ci-precision-diagnostics.yml'
 DIAGNOSTICS_SCRIPT = WORKFLOW_DIR / 'precision_experiments.py'
 WINDOWS_DIAGNOSTICS_RUNNER = WORKFLOW_DIR / 'run_windows_precision_diagnostics.ps1'
+PAIRED_DIAGNOSTICS_WORKFLOW = WORKFLOW_DIR / 'ci-precision-thread-paired.yml'
+PAIRED_DIAGNOSTICS_RUNNER = WORKFLOW_DIR / 'run_paired_precision_diagnostics.py'
 
 
 class PrecisionCheckWorkflowTests(unittest.TestCase):
@@ -25,6 +30,92 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         bb = numpy.eye(3).reshape(1, 3, 1, 3)
         matrix = module.spin_orbital_a((aa, ab, bb))
         self.assertEqual(matrix.shape, (5, 5))
+
+    def test_direct_tddft_roots_uses_conjugate_a_block(self):
+        import numpy
+
+        spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        aa = numpy.asarray([[[[2.0]]]])
+        ab = numpy.asarray([[[[1.0j]]]])
+        bb = numpy.asarray([[[[3.0]]]])
+        zeros = tuple(numpy.zeros_like(block) for block in (aa, ab, bb))
+        actual = module.direct_tddft_roots((aa, ab, bb), zeros, 2)
+        a_full = numpy.asarray([[2.0, 1.0j], [-1.0j, 3.0]])
+        expected = numpy.sort(numpy.linalg.eigvalsh(a_full))
+        numpy.testing.assert_allclose(actual, expected)
+
+    def test_pbc_diagnostics_restore_atom_specific_grid_setting(self):
+        from pyscf.dft import radi
+
+        spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        original = radi.ATOM_SPECIFIC_TREUTLER_GRIDS
+        with module.pbc_test_grid_settings():
+            self.assertFalse(radi.ATOM_SPECIFIC_TREUTLER_GRIDS)
+        self.assertIs(radi.ATOM_SPECIFIC_TREUTLER_GRIDS, original)
+
+    def test_paired_runner_sets_thread_environment_and_separates_outputs(self):
+        spec = importlib.util.spec_from_file_location('run_paired_precision_diagnostics', PAIRED_DIAGNOSTICS_RUNNER)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        fake = '''
+import argparse, json, os, pathlib
+parser = argparse.ArgumentParser()
+parser.add_argument('--experiment')
+parser.add_argument('--repeats')
+parser.add_argument('--output')
+args = parser.parse_args()
+output = pathlib.Path(args.output)
+output.mkdir(parents=True, exist_ok=True)
+keys = ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS', 'VECLIB_MAXIMUM_THREADS')
+(output / 'observed.json').write_text(json.dumps({key: os.environ.get(key) for key in keys}))
+'''
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            script = root / 'fake.py'
+            script.write_text(fake, encoding='utf-8')
+            code = module.main((
+                '--python', sys.executable, '--script', str(script),
+                '--experiment', 'fake', '--repeats', '1', '--output', str(root / 'out'),
+            ))
+            self.assertEqual(code, 0)
+            for threads in ('1', '4'):
+                observed = json.loads((root / 'out' / f't{threads}' / 'observed.json').read_text())
+                self.assertEqual(set(observed.values()), {threads})
+            metadata = json.loads((root / 'out' / 'paired-runs.json').read_text())
+            self.assertEqual([run['threads'] for run in metadata['runs']], [1, 4])
+
+    def test_paired_runner_propagates_child_failure(self):
+        spec = importlib.util.spec_from_file_location('run_paired_precision_diagnostics', PAIRED_DIAGNOSTICS_RUNNER)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        fake = 'import os, sys; sys.exit(9 if os.environ["OMP_NUM_THREADS"] == "4" else 0)'
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            script = root / 'fake.py'
+            script.write_text(fake, encoding='utf-8')
+            code = module.main((
+                '--python', sys.executable, '--script', str(script),
+                '--experiment', 'fake', '--repeats', '1', '--output', str(root / 'out'),
+            ))
+            self.assertEqual(code, 9)
+
+    def test_paired_workflow_builds_once_for_seven_platform_pairs(self):
+        text = PAIRED_DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')
+        self.assertIn('workflow_dispatch:', text)
+        self.assertIn('timeout-minutes: 360', text)
+        self.assertIn('fail-fast: false', text)
+        self.assertEqual(text.count('uses: actions/upload-artifact@v7'), 3)
+        self.assertNotIn('matrix.threads', text)
+        self.assertNotIn('threads: ["1", "4"]', text)
+        self.assertIn('python-version: ["3.8", "3.12", "3.13"]', text)
+        self.assertIn('python-version: ["3.8", "3.13"]', text)
+        self.assertIn('python-version: ["3.12", "3.13"]', text)
+        self.assertIn('run_paired_precision_diagnostics.py', text)
+        self.assertIn('-Paired', text)
 
     def test_check_workflow_replaces_old_precision_workflow(self):
         self.assertTrue(WORKFLOW.exists())

@@ -2,6 +2,7 @@
 """Focused, non-blocking diagnostics for the precision-triage workflow."""
 
 import argparse
+import contextlib
 import copy
 import csv
 import hashlib
@@ -512,7 +513,7 @@ def direct_tddft_roots(a, b, nroots):
     b_aa = b_aa.reshape(nocc_a * nvir_a, nocc_a * nvir_a)
     b_ab = b_ab.reshape(nocc_a * nvir_a, nocc_b * nvir_b)
     b_bb = b_bb.reshape(nocc_b * nvir_b, nocc_b * nvir_b)
-    a_full = numpy.block([[a_aa, a_ab], [a_ab.T, a_bb]])
+    a_full = numpy.block([[a_aa, a_ab], [a_ab.conj().T, a_bb]])
     b_full = numpy.block([[b_aa, b_ab], [b_ab.T, b_bb]])
     abba = numpy.asarray(numpy.block([[a_full, b_full], [-b_full.conj(), -a_full.conj()]]))
     roots = numpy.linalg.eig(abba)[0]
@@ -645,6 +646,18 @@ def pbc_snapshot(mf, td, a, b):
     )
 
 
+@contextlib.contextmanager
+def pbc_test_grid_settings():
+    from pyscf.dft import radi
+    original = radi.ATOM_SPECIFIC_TREUTLER_GRIDS
+    radi.ATOM_SPECIFIC_TREUTLER_GRIDS = False
+    try:
+        yield
+    finally:
+        radi.ATOM_SPECIFIC_TREUTLER_GRIDS = original
+
+
+@pbc_test_grid_settings()
 def run_pbc_tdhf(args, recorder):
     import numpy
     from pyscf.data.nist import HARTREE2EV
@@ -709,6 +722,7 @@ def spin_orbital_a(a):
     return numpy.block([[aa, ab], [ab.conj().T, bb]])
 
 
+@pbc_test_grid_settings()
 def run_pbc_tda(args, recorder, experiment, unrestricted, xc, pseudo, place):
     import numpy
     from pyscf.pbc import scf
