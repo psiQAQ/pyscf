@@ -20,7 +20,7 @@ on:
           - tddft
           - analyze
       repeats:
-        description: Attempts per diagnostic family
+        description: Maximum outer repetitions per diagnostic family
         required: true
         default: "200"
         type: string
@@ -34,23 +34,16 @@ on:
           - ubuntu
           - macos
           - windows
+
 jobs:
-  diagnostics-linux:
+  paired-linux:
     if: inputs.platform == 'all' || inputs.platform == 'ubuntu'
     runs-on: ubuntu-latest
     timeout-minutes: 360
-    env:
-      DIAGNOSTIC_EXPERIMENT: ${{ inputs.experiment }}
-      DIAGNOSTIC_REPEATS: ${{ inputs.repeats }}
-      OMP_NUM_THREADS: ${{ matrix.threads }}
-      OPENBLAS_NUM_THREADS: ${{ matrix.threads }}
-      MKL_NUM_THREADS: ${{ matrix.threads }}
-      VECLIB_MAXIMUM_THREADS: ${{ matrix.threads }}
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.8", "3.12", "3.13"]
-        threads: ["1", "4"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v6
@@ -61,48 +54,42 @@ jobs:
           .github/workflows/ci_linux/deps_apt.sh
           .github/workflows/ci_linux/python_deps.sh
           .github/workflows/ci_linux/build_pyscf.sh
-      - name: Run precision diagnostics
+      - name: Run paired diagnostics
         run: |
           export PYTHONPATH="$GITHUB_WORKSPACE:${PYTHONPATH:-}"
           ulimit -s 20000
-          python .github/workflows/precision_experiments.py \
-            --experiment "$DIAGNOSTIC_EXPERIMENT" \
-            --repeats "$DIAGNOSTIC_REPEATS" \
-            --output "tmp/precision-diagnostics/$DIAGNOSTIC_EXPERIMENT"
+          python .github/workflows/run_paired_precision_diagnostics.py \
+            --script .github/workflows/precision_experiments.py \
+            --experiment "${{ inputs.experiment }}" \
+            --repeats "${{ inputs.repeats }}" \
+            --output "tmp/precision-thread-paired/${{ inputs.experiment }}"
       - name: Capture runtime environment
         if: always()
         run: |
           python .github/workflows/collect_precision_environment.py \
-            --snapshot-dir "tmp/precision-diagnostics/$DIAGNOSTIC_EXPERIMENT/environment/runtime"
-      - name: Publish diagnostic summary
+            --snapshot-dir "tmp/precision-thread-paired/${{ inputs.experiment }}/environment/runtime"
+      - name: Publish paired summaries
         if: always()
         run: |
-          summary="tmp/precision-diagnostics/$DIAGNOSTIC_EXPERIMENT/summary.md"
-          if [ -f "$summary" ]; then cat "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
-      - name: Upload Linux diagnostic artifact
+          for summary in tmp/precision-thread-paired/${{ inputs.experiment }}/t*/summary.md; do
+            if [ -f "$summary" ]; then cat "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
+          done
+      - name: Upload Linux paired artifact
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: precision-diagnostics-${{ inputs.experiment }}-ubuntu-py${{ matrix.python-version }}-t${{ matrix.threads }}
-          path: tmp/precision-diagnostics/${{ inputs.experiment }}
+          name: precision-thread-paired-${{ inputs.experiment }}-ubuntu-py${{ matrix.python-version }}
+          path: tmp/precision-thread-paired/${{ inputs.experiment }}
           if-no-files-found: error
 
-  diagnostics-macos:
+  paired-macos:
     if: inputs.platform == 'all' || inputs.platform == 'macos'
     runs-on: macos-latest
     timeout-minutes: 360
-    env:
-      DIAGNOSTIC_EXPERIMENT: ${{ inputs.experiment }}
-      DIAGNOSTIC_REPEATS: ${{ inputs.repeats }}
-      OMP_NUM_THREADS: ${{ matrix.threads }}
-      OPENBLAS_NUM_THREADS: ${{ matrix.threads }}
-      MKL_NUM_THREADS: ${{ matrix.threads }}
-      VECLIB_MAXIMUM_THREADS: ${{ matrix.threads }}
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.8", "3.13"]
-        threads: ["1", "4"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v6
@@ -113,41 +100,37 @@ jobs:
           .github/workflows/ci_macos/deps_apt.sh
           .github/workflows/ci_macos/python_deps.sh
           .github/workflows/ci_macos/build_pyscf.sh
-      - name: Run precision diagnostics
+      - name: Run paired diagnostics
         run: |
           export PYTHONPATH="$GITHUB_WORKSPACE:${PYTHONPATH:-}"
-          python .github/workflows/precision_experiments.py \
-            --experiment "$DIAGNOSTIC_EXPERIMENT" \
-            --repeats "$DIAGNOSTIC_REPEATS" \
-            --output "tmp/precision-diagnostics/$DIAGNOSTIC_EXPERIMENT"
+          python .github/workflows/run_paired_precision_diagnostics.py \
+            --script .github/workflows/precision_experiments.py \
+            --experiment "${{ inputs.experiment }}" \
+            --repeats "${{ inputs.repeats }}" \
+            --output "tmp/precision-thread-paired/${{ inputs.experiment }}"
       - name: Capture runtime environment
         if: always()
         run: |
           python .github/workflows/collect_precision_environment.py \
-            --snapshot-dir "tmp/precision-diagnostics/$DIAGNOSTIC_EXPERIMENT/environment/runtime"
-      - name: Publish diagnostic summary
+            --snapshot-dir "tmp/precision-thread-paired/${{ inputs.experiment }}/environment/runtime"
+      - name: Publish paired summaries
         if: always()
         run: |
-          summary="tmp/precision-diagnostics/$DIAGNOSTIC_EXPERIMENT/summary.md"
-          if [ -f "$summary" ]; then cat "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
-      - name: Upload macOS diagnostic artifact
+          for summary in tmp/precision-thread-paired/${{ inputs.experiment }}/t*/summary.md; do
+            if [ -f "$summary" ]; then cat "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
+          done
+      - name: Upload macOS paired artifact
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: precision-diagnostics-${{ inputs.experiment }}-macos-py${{ matrix.python-version }}-t${{ matrix.threads }}
-          path: tmp/precision-diagnostics/${{ inputs.experiment }}
+          name: precision-thread-paired-${{ inputs.experiment }}-macos-py${{ matrix.python-version }}
+          path: tmp/precision-thread-paired/${{ inputs.experiment }}
           if-no-files-found: error
 
-  diagnostics-windows:
+  paired-windows:
     if: inputs.platform == 'all' || inputs.platform == 'windows'
     runs-on: windows-latest
     timeout-minutes: 360
-    env:
-      DIAGNOSTIC_EXPERIMENT: ${{ inputs.experiment }}
-      DIAGNOSTIC_REPEATS: ${{ inputs.repeats }}
-      OMP_NUM_THREADS: ${{ matrix.threads }}
-      OPENBLAS_NUM_THREADS: ${{ matrix.threads }}
-      MKL_NUM_THREADS: ${{ matrix.threads }}
     defaults:
       run:
         shell: pwsh
@@ -155,7 +138,6 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.12", "3.13"]
-        threads: ["1", "4"]
     steps:
       - uses: actions/checkout@v4
       - uses: conda-incubator/setup-miniconda@v4
@@ -171,31 +153,30 @@ jobs:
           install: >-
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-openblas
-      - name: Build installed wheel and run diagnostics
+      - name: Build installed wheel and run paired diagnostics
         env:
           RUNTIME_DLL_DIR: ${{ steps.msys2.outputs.msys2-location }}\ucrt64\bin
         run: |
           $tag = "${{ matrix.python-version }}".Replace(".", "")
           .\.github\workflows\run_windows_precision_diagnostics.ps1 `
-            -BuildEnvName "pyscf-diag-build-$tag" `
-            -TestEnvName "pyscf-diag-test-$tag" `
+            -BuildEnvName "pyscf-paired-build-$tag" `
+            -TestEnvName "pyscf-paired-test-$tag" `
             -PythonVersion "${{ matrix.python-version }}" `
-            -Experiment $env:DIAGNOSTIC_EXPERIMENT `
-            -Repeats ([int]$env:DIAGNOSTIC_REPEATS) `
-            -RuntimeDllDir $env:RUNTIME_DLL_DIR
-      - name: Publish diagnostic summary
+            -Experiment "${{ inputs.experiment }}" `
+            -Repeats ([int]"${{ inputs.repeats }}") `
+            -RuntimeDllDir $env:RUNTIME_DLL_DIR `
+            -Paired
+      - name: Publish paired summaries
         if: always()
         run: |
-          $summary = "tmp/precision-diagnostics/$env:DIAGNOSTIC_EXPERIMENT/summary.md"
-          if (Test-Path $summary) {
-            Get-Content $summary | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-          }
-      - name: Upload Windows diagnostic artifact
+          Get-ChildItem "tmp/precision-thread-paired/${{ inputs.experiment }}/t*/summary.md" -ErrorAction SilentlyContinue |
+            ForEach-Object { Get-Content $_ | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+      - name: Upload Windows paired artifact
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: precision-diagnostics-${{ inputs.experiment }}-windows-py${{ matrix.python-version }}-t${{ matrix.threads }}
+          name: precision-thread-paired-${{ inputs.experiment }}-windows-py${{ matrix.python-version }}
           path: |
-            tmp/precision-diagnostics/${{ inputs.experiment }}
+            tmp/precision-thread-paired/${{ inputs.experiment }}
             .github/workflows/ci_windows/build-logs/**
           if-no-files-found: error

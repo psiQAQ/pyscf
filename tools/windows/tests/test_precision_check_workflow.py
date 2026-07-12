@@ -14,7 +14,7 @@ WINDOWS_RUNNER = WORKFLOW_DIR / 'run_windows_precision_tests.ps1'
 DIAGNOSTICS_WORKFLOW = WORKFLOW_DIR / 'ci-precision-diagnostics.yml'
 DIAGNOSTICS_SCRIPT = WORKFLOW_DIR / 'precision_experiments.py'
 WINDOWS_DIAGNOSTICS_RUNNER = WORKFLOW_DIR / 'run_windows_precision_diagnostics.ps1'
-PAIRED_DIAGNOSTICS_WORKFLOW = WORKFLOW_DIR / 'ci-precision-thread-paired.yml'
+PAIRED_DIAGNOSTICS_WORKFLOW = DIAGNOSTICS_WORKFLOW
 PAIRED_DIAGNOSTICS_RUNNER = WORKFLOW_DIR / 'run_paired_precision_diagnostics.py'
 
 
@@ -105,6 +105,7 @@ keys = ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS', 'VECLIB_MA
 
     def test_paired_workflow_builds_once_for_seven_platform_pairs(self):
         text = PAIRED_DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')
+        self.assertFalse((WORKFLOW_DIR / 'ci-precision-thread-paired.yml').exists())
         self.assertIn('workflow_dispatch:', text)
         self.assertIn('timeout-minutes: 360', text)
         self.assertIn('fail-fast: false', text)
@@ -167,13 +168,14 @@ keys = ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS', 'VECLIB_MA
         self.assertNotIn('push:', text)
         self.assertNotIn('pull_request:', text)
         self.assertNotIn('schedule:', text)
-        self.assertIn('python .github/workflows/precision_experiments.py', text)
+        self.assertIn('python .github/workflows/run_paired_precision_diagnostics.py', text)
+        self.assertIn('--script .github/workflows/precision_experiments.py', text)
         self.assertIn('run_windows_precision_diagnostics.ps1', text)
-        self.assertIn('diagnostics-linux:', text)
-        self.assertIn('diagnostics-macos:', text)
-        self.assertIn('diagnostics-windows:', text)
+        self.assertIn('paired-linux:', text)
+        self.assertIn('paired-macos:', text)
+        self.assertIn('paired-windows:', text)
         self.assertNotIn('matrix.family', text)
-        self.assertIn('DIAGNOSTIC_REPEATS: ${{ inputs.repeats }}', text)
+        self.assertIn('--repeats "${{ inputs.repeats }}"', text)
         self.assertIn('uses: actions/upload-artifact@v7', text)
         self.assertEqual(text.count('uses: actions/upload-artifact@v7'), 3)
         self.assertEqual(text.count('if: always()'), 8)
@@ -201,8 +203,9 @@ keys = ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS', 'VECLIB_MA
         self.assertIn('- all', workflow)
         self.assertIn('default: all', workflow)
         self.assertIn('default: "200"', workflow)
-        self.assertEqual(workflow.count('threads: ["1", "4"]'), 3)
-        self.assertIn('matrix.threads', workflow)
+        self.assertNotIn('threads: ["1", "4"]', workflow)
+        self.assertNotIn('matrix.threads', workflow)
+        self.assertIn('run_paired_precision_diagnostics.py', workflow)
         self.assertIn("def nodeid_complete(records, nodeid):", script)
         self.assertIn("if args.experiment == 'all':", script)
         self.assertIn('nodeid_complete(recorder.records, nodeid)', script)
