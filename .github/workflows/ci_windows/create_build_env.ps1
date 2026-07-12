@@ -20,9 +20,15 @@ try {
     $contents = $contents -replace '(?m)^  - python=.*$', "  - python=$PythonVersion"
     [System.IO.File]::WriteAllText($TemporaryEnvironmentPath, $contents, (New-Object System.Text.UTF8Encoding($false)))
 
-    conda env create --file $TemporaryEnvironmentPath
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to create Windows build environment $BuildEnvName for Python $PythonVersion"
+    for ($attempt = 1; $attempt -le 3; $attempt++) {
+        conda env create --file $TemporaryEnvironmentPath
+        if ($LASTEXITCODE -eq 0) {
+            break
+        }
+        if ($attempt -eq 3) {
+            throw "Failed to create Windows build environment $BuildEnvName for Python $PythonVersion"
+        }
+        Start-Sleep -Seconds (10 * $attempt)
     }
 }
 finally {

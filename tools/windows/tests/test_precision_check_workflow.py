@@ -15,6 +15,7 @@ WINDOWS_RUNNER = WORKFLOW_DIR / 'run_windows_precision_tests.ps1'
 DIAGNOSTICS_WORKFLOW = WORKFLOW_DIR / 'ci-precision-diagnostics.yml'
 DIAGNOSTICS_SCRIPT = WORKFLOW_DIR / 'precision_experiments.py'
 WINDOWS_DIAGNOSTICS_RUNNER = WORKFLOW_DIR / 'run_windows_precision_diagnostics.ps1'
+WINDOWS_BUILD_ENV_SCRIPT = WORKFLOW_DIR / 'ci_windows' / 'create_build_env.ps1'
 PAIRED_DIAGNOSTICS_WORKFLOW = DIAGNOSTICS_WORKFLOW
 PAIRED_DIAGNOSTICS_RUNNER = WORKFLOW_DIR / 'run_paired_precision_diagnostics.py'
 
@@ -25,6 +26,11 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         self.assertIn('--retry-all-errors', text)
         self.assertIn('--output "$archive"', text)
         self.assertIn('tar xzf "$archive"', text)
+
+    def test_windows_build_environment_retries_transient_conda_failure(self):
+        text = WINDOWS_BUILD_ENV_SCRIPT.read_text(encoding='utf-8')
+        self.assertIn('for ($attempt = 1; $attempt -le 3; $attempt++)', text)
+        self.assertIn('Start-Sleep -Seconds (10 * $attempt)', text)
 
     def test_spin_orbital_matrix_uses_valid_numpy_block_layout(self):
         import numpy
