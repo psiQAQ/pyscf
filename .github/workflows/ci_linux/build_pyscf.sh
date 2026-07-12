@@ -3,7 +3,11 @@
 set -e
 
 cd ./pyscf/lib
-curl -L "https://github.com/pyscf/pyscf-build-deps/blob/master/pyscf-2.8a-deps.tar.gz?raw=true" | tar xzf -
+archive=$(mktemp)
+trap 'rm -f "$archive"' EXIT
+curl --fail --location --retry 5 --retry-delay 2 --retry-all-errors --output "$archive" \
+  "https://github.com/pyscf/pyscf-build-deps/blob/master/pyscf-2.8a-deps.tar.gz?raw=true"
+tar xzf "$archive"
 mkdir build; cd build
 cmake -DBUILD_LIBXC=OFF -DBUILD_XCFUN=ON -DBUILD_LIBCINT=OFF -DXCFUN_MAX_ORDER=4 ..
 make -j4

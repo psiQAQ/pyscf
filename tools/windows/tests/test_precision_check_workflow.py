@@ -10,6 +10,7 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
 WORKFLOW_DIR = REPO_ROOT / '.github' / 'workflows'
 WORKFLOW = WORKFLOW_DIR / 'ci-precision-check.yml'
 UNIX_RUNNER = WORKFLOW_DIR / 'run_unix_precision_tests.sh'
+LINUX_BUILD_SCRIPT = WORKFLOW_DIR / 'ci_linux' / 'build_pyscf.sh'
 WINDOWS_RUNNER = WORKFLOW_DIR / 'run_windows_precision_tests.ps1'
 DIAGNOSTICS_WORKFLOW = WORKFLOW_DIR / 'ci-precision-diagnostics.yml'
 DIAGNOSTICS_SCRIPT = WORKFLOW_DIR / 'precision_experiments.py'
@@ -19,6 +20,12 @@ PAIRED_DIAGNOSTICS_RUNNER = WORKFLOW_DIR / 'run_paired_precision_diagnostics.py'
 
 
 class PrecisionCheckWorkflowTests(unittest.TestCase):
+    def test_linux_build_dependency_download_retries_to_file(self):
+        text = LINUX_BUILD_SCRIPT.read_text(encoding='utf-8')
+        self.assertIn('--retry-all-errors', text)
+        self.assertIn('--output "$archive"', text)
+        self.assertIn('tar xzf "$archive"', text)
+
     def test_spin_orbital_matrix_uses_valid_numpy_block_layout(self):
         import numpy
 
