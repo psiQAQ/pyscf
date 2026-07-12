@@ -9,7 +9,7 @@
 | Full | Linux 3.8/3.12、Linux aarch64 3.9、macOS 3.13 | `workflow_dispatch` | 源码构建后的完整测试 | `ci.yml` |
 | Windows full | Windows 3.13 | `workflow_dispatch` | 干净环境中安装 wheel 后的完整测试 | `ci-windows.yml` |
 | Precision check | Linux 3.8/3.12/3.13、macOS 3.8/3.13、Windows 3.12/3.13 | `workflow_dispatch` | `precision-selected-nodeids.txt` 中的10项待排查测试 | `ci-precision-check.yml` |
-| Precision diagnostics | 同上，可按平台筛选 | `workflow_dispatch` | 选择一个诊断族，保存计算中间量和限量快照 | `ci-precision-diagnostics.yml` |
+| Precision diagnostics | 同上，可按平台筛选；线程1/4各一组 | `workflow_dispatch` | 顺序诊断10个nodeid，保存计算中间量和限量快照 | `ci-precision-diagnostics.yml` |
 
 暂时排除 macOS 3.12 和 Windows 3.8。Precision check 使用 `fail-fast: false`，但不允许失败；一个组合失败不会取消其他组合，最终工作流仍会失败。
 
@@ -93,7 +93,9 @@ ci-precision-check.yml
 
 ## Precision diagnostics
 
-`ci-precision-diagnostics.yml` 只允许手动触发，不是 PR gating check。输入选择诊断族、重复次数、平台族和线程数。Unix 复用现有源码构建脚本；Windows 通过 `run_windows_precision_diagnostics.ps1` 构建并安装 wheel，再在清空 `PYTHONPATH` 的测试环境运行同一个 `precision_experiments.py`。
+`ci-precision-diagnostics.yml` 只允许手动触发，不是 PR gating check。正式运行默认选择 `all`、每个nodeid最多200次，并将线程1和4展开为额外矩阵；平台输入仍可用于单独排查。Unix 复用现有源码构建脚本；Windows 通过 `run_windows_precision_diagnostics.ps1` 构建并安装 wheel，再在清空 `PYTHONPATH` 的测试环境运行同一个 `precision_experiments.py`。
+
+单个job按实验族顺序处理10个nodeid。一个nodeid只有在首个通过样本和首个非通过样本都已记录后才提前停止；若始终只有一种状态则完整执行200次。`eom` 的IP和EA分别判断。正式 `platform=all` 会产生7个平台/Python组合×2种线程数，共14个job。
 
 诊断脚本覆盖9个实验族，其中 `eom` 同时覆盖 IP/EA 两个 nodeid。每次尝试写入 JSONL 标量和数组 fingerprint；完整 NPZ 仅保存首个通过样本以及每种失败签名的首个样本。
 

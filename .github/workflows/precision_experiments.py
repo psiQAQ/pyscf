@@ -38,6 +38,23 @@ def nodeid_for(experiment, mode):
     return NODEIDS.get(f'{experiment}:{mode}', NODEIDS.get(experiment))
 
 
+def nodeid_complete(records, nodeid):
+    statuses = {
+        record['status'] for record in records
+        if record['nodeid'] == nodeid and record['attempt'] > 0
+    }
+    return 'pass' in statuses and any(status != 'pass' for status in statuses)
+
+
+def experiment_complete(recorder):
+    prefix = f'{recorder.experiment}:'
+    nodeids = {
+        nodeid for name, nodeid in NODEIDS.items()
+        if name == recorder.experiment or name.startswith(prefix)
+    }
+    return all(nodeid_complete(recorder.records, nodeid) for nodeid in nodeids)
+
+
 def json_value(value):
     if isinstance(value, dict):
         return {str(key): json_value(item) for key, item in value.items()}
@@ -247,6 +264,8 @@ def run_eom_kind(mycc, kind):
 def run_eom(args, recorder):
     for attempt in range(1, args.repeats + 1):
         for kind in ('ip', 'ea'):
+            if nodeid_complete(recorder.records, nodeid_for('eom', kind)):
+                continue
             log_path = recorder.log_path(f'eom-{kind}', attempt)
             start = time.monotonic()
             mol = None
@@ -262,6 +281,8 @@ def run_eom(args, recorder):
                                 {'log_file': str(log_path), 'traceback': traceback.format_exc()})
             finally:
                 close_mol(mol)
+        if experiment_complete(recorder):
+            break
 
 
 def build_ucasscf_system(log_path):
@@ -361,6 +382,8 @@ def run_ucasscf(args, recorder):
                                 {'log_file': str(log_path), 'traceback': traceback.format_exc()})
             finally:
                 close_mol(mol)
+        if experiment_complete(recorder):
+            break
     for mode in ('default', 'fixed'):
         current = checkpoints / f'{mode}-current.chk'
         if current.exists():
@@ -474,6 +497,8 @@ def run_sgx(args, recorder):
                             {'log_file': str(log_path), 'traceback': traceback.format_exc()})
         finally:
             close_mol(mol)
+        if experiment_complete(recorder):
+            break
 
 
 def direct_tddft_roots(a, b, nroots):
@@ -579,6 +604,8 @@ def run_tddft(args, recorder):
                             details)
         finally:
             close_mol(mol)
+        if experiment_complete(recorder):
+            break
 
 
 def build_diamond_cell(log_path, pseudo):
@@ -668,6 +695,8 @@ def run_pbc_tdhf(args, recorder):
                             {'log_file': str(log_path), 'traceback': traceback.format_exc()})
         finally:
             close_mol(cell)
+        if experiment_complete(recorder):
+            break
 
 
 def spin_orbital_a(a):
@@ -728,6 +757,8 @@ def run_pbc_tda(args, recorder, experiment, unrestricted, xc, pseudo, place):
                             {'log_file': str(log_path), 'traceback': traceback.format_exc()})
         finally:
             close_mol(cell)
+        if experiment_complete(recorder):
+            break
 
 
 def run_pbc_hse06(args, recorder):
@@ -816,6 +847,8 @@ def run_sa4_newton(args, recorder):
                             {'log_file': str(log_path), 'traceback': traceback.format_exc()})
         finally:
             close_mol(mol)
+        if experiment_complete(recorder):
+            break
     for name in ('sa4-reference', 'sa4-newton'):
         current = checkpoints / f'{name}-current.chk'
         if current.exists():
@@ -883,22 +916,18 @@ def run_analyze(args, recorder):
                             {'log_file': str(log_path), 'traceback': traceback.format_exc()})
         finally:
             close_mol(mol)
+        if experiment_complete(recorder):
+            break
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    experiments = (
-        'eom', 'pbc-tdhf', 'pbc-hse06', 'pbc-hse03', 'ucasscf',
-        'sa4-newton', 'sgx', 'tddft', 'analyze',
-    )
-    parser.add_argument('--experiment', choices=experiments, required=True)
-    parser.add_argument('--repeats', type=int, required=True)
-    parser.add_argument('--output', type=Path, required=True)
-    args = parser.parse_args()
-    if args.repeats < 1:
-        parser.error('--repeats must be positive')
+EXPERIMENTS = (
+    'eom', 'pbc-tdhf', 'pbc-hse06', 'pbc-hse03', 'ucasscf',
+    'sa4-newton', 'sgx', 'tddft', 'analyze',
+)
 
-    recorder = Recorder(args.experiment, args.output)
+
+def run_experiment(experiment, args, output):
+    recorder = Recorder(experiment, output)
     try:
         {
             'eom': run_eom,
@@ -910,11 +939,45 @@ def main():
             'sgx': run_sgx,
             'tddft': run_tddft,
             'analyze': run_analyze,
-        }[args.experiment](args, recorder)
+        }[experiment](args, recorder)
     finally:
         recorder.finish()
     if not recorder.records or all(record['status'] == 'exception' for record in recorder.records):
-        raise SystemExit('Diagnostic produced no usable records; inspect logs and artifact output.')
+        raise SystemExit(f'{experiment} produced no usable records; inspect logs and artifact output.')
+    return recorder
+
+
+def write_all_summary(output, recorders):
+    records = [record for recorder in recorders for record in recorder.records]
+    with (output / 'records.jsonl').open('w', encoding='utf-8') as handle:
+        for record in records:
+            handle.write(json.dumps(record, sort_keys=True) + '\n')
+    summaries = [(recorder.output / 'summary.md').read_text(encoding='utf-8') for recorder in recorders]
+    (output / 'summary.md').write_text('\n'.join(summaries), encoding='utf-8')
+    with (output / 'summary.csv').open('w', encoding='utf-8', newline='') as handle:
+        writer = csv.writer(handle)
+        writer.writerow(('experiment', 'nodeid', 'mode', 'status', 'count'))
+        for recorder in recorders:
+            grouped = Counter((record['nodeid'], record['mode'], record['status']) for record in recorder.records)
+            for (nodeid, mode, status), count in sorted(grouped.items()):
+                writer.writerow((recorder.experiment, nodeid, mode, status, count))
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--experiment', choices=('all',) + EXPERIMENTS, required=True)
+    parser.add_argument('--repeats', type=int, required=True)
+    parser.add_argument('--output', type=Path, required=True)
+    args = parser.parse_args()
+    if args.repeats < 1:
+        parser.error('--repeats must be positive')
+
+    if args.experiment == 'all':
+        args.output.mkdir(parents=True, exist_ok=True)
+        recorders = [run_experiment(experiment, args, args.output / experiment) for experiment in EXPERIMENTS]
+        write_all_summary(args.output, recorders)
+    else:
+        run_experiment(args.experiment, args, args.output)
 
 
 if __name__ == '__main__':

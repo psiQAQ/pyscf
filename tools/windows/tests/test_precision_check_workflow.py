@@ -91,6 +91,18 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         self.assertIn('array_metadata', script)
         self.assertIn("all(record['status'] == 'exception'", script)
 
+    def test_formal_diagnostics_run_all_nodeids_with_early_stop(self):
+        workflow = DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')
+        script = DIAGNOSTICS_SCRIPT.read_text(encoding='utf-8')
+        self.assertIn('- all', workflow)
+        self.assertIn('default: all', workflow)
+        self.assertIn('default: "200"', workflow)
+        self.assertEqual(workflow.count('threads: ["1", "4"]'), 3)
+        self.assertIn('matrix.threads', workflow)
+        self.assertIn("def nodeid_complete(records, nodeid):", script)
+        self.assertIn("if args.experiment == 'all':", script)
+        self.assertIn('nodeid_complete(recorder.records, nodeid)', script)
+
     def test_runners_repeat_each_selected_test_one_hundred_times(self):
         self.assertIn('repeats=100', UNIX_RUNNER.read_text(encoding='utf-8'))
         self.assertIn('"-Repeats", "100"', WINDOWS_RUNNER.read_text(encoding='utf-8'))
