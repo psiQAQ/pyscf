@@ -21,8 +21,9 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
 
     def test_check_workflow_has_approved_triggers_and_jobs(self):
         text = WORKFLOW.read_text(encoding='utf-8')
-        for trigger in ('push:', 'pull_request:', 'workflow_dispatch:'):
-            self.assertIn(trigger, text)
+        self.assertIn('workflow_dispatch:', text)
+        self.assertNotIn('push:', text)
+        self.assertNotIn('pull_request:', text)
         self.assertIn('precision-unix:', text)
         self.assertIn('precision-windows:', text)
         self.assertIn('fail-fast: false', text)

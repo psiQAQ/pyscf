@@ -8,7 +8,7 @@
 | --- | --- | --- | --- | --- |
 | Full | Linux 3.8/3.12、Linux aarch64 3.9、macOS 3.13 | `workflow_dispatch` | 源码构建后的完整测试 | `ci.yml` |
 | Windows full | Windows 3.13 | `workflow_dispatch` | 干净环境中安装 wheel 后的完整测试 | `ci-windows.yml` |
-| Precision check | Linux 3.8/3.12/3.13、macOS 3.8/3.13、Windows 3.12/3.13 | `push`、`pull_request`、`workflow_dispatch` | `precision-selected-nodeids.txt` 中的10项待排查测试 | `ci-precision-check.yml` |
+| Precision check | Linux 3.8/3.12/3.13、macOS 3.8/3.13、Windows 3.12/3.13 | `workflow_dispatch` | `precision-selected-nodeids.txt` 中的10项待排查测试 | `ci-precision-check.yml` |
 | Precision diagnostics | 同上，可按平台筛选 | `workflow_dispatch` | 选择一个诊断族，保存计算中间量和限量快照 | `ci-precision-diagnostics.yml` |
 
 暂时排除 macOS 3.12 和 Windows 3.8。Precision check 使用 `fail-fast: false`，但不允许失败；一个组合失败不会取消其他组合，最终工作流仍会失败。
@@ -54,6 +54,8 @@ ci-windows.yml: windows-build-full
 ## Precision check
 
 `ci-precision-check.yml` 包含两个 job。
+
+当前只允许手动触发，避免诊断实验提交同时启动耗时的100次常规精度 check。
 
 ### Linux 与 macOS：`precision-unix`
 
