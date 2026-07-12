@@ -455,7 +455,19 @@ def run_sgx_case(mol, settings, order, xc, delta):
     return details, force_ok and gradient_ok, arrays
 
 
-def run_sgx(args, recorder):
+SGX_XCS = ('PBE0', 'HSE06', 'WB97X')
+SGX_SHARDS = {
+    'sgx-pbe0': ('PBE0',),
+    'sgx-hse06': ('HSE06',),
+    'sgx-wb97x': ('WB97X',),
+}
+
+
+def sgx_xcs(experiment):
+    return SGX_SHARDS.get(experiment, SGX_XCS)
+
+
+def run_sgx(args, recorder, xcs=SGX_XCS):
     settings_list = (
         (False, False, False, False, False),
         (True, False, False, False, False),
@@ -469,7 +481,7 @@ def run_sgx(args, recorder):
         try:
             mol = build_sgx_molecule(log_path)
             for setting_index, (settings, order) in enumerate(zip(settings_list, precisions)):
-                for xc in ('PBE0', 'HSE06', 'WB97X'):
+                for xc in xcs:
                     start = time.monotonic()
                     mode = f'settings-{setting_index}:{xc}:delta-{delta:.0e}'
                     try:
@@ -948,17 +960,19 @@ EXPERIMENTS = (
 def run_experiment(experiment, args, output):
     recorder = Recorder(experiment, output)
     try:
-        {
-            'eom': run_eom,
-            'pbc-tdhf': run_pbc_tdhf,
-            'pbc-hse06': run_pbc_hse06,
-            'pbc-hse03': run_pbc_hse03,
-            'ucasscf': run_ucasscf,
-            'sa4-newton': run_sa4_newton,
-            'sgx': run_sgx,
-            'tddft': run_tddft,
-            'analyze': run_analyze,
-        }[experiment](args, recorder)
+        if experiment == 'sgx' or experiment in SGX_SHARDS:
+            run_sgx(args, recorder, sgx_xcs(experiment))
+        else:
+            {
+                'eom': run_eom,
+                'pbc-tdhf': run_pbc_tdhf,
+                'pbc-hse06': run_pbc_hse06,
+                'pbc-hse03': run_pbc_hse03,
+                'ucasscf': run_ucasscf,
+                'sa4-newton': run_sa4_newton,
+                'tddft': run_tddft,
+                'analyze': run_analyze,
+            }[experiment](args, recorder)
     finally:
         recorder.finish()
     if not recorder.records or all(record['status'] == 'exception' for record in recorder.records):
@@ -984,7 +998,7 @@ def write_all_summary(output, recorders):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--experiment', choices=('all',) + EXPERIMENTS, required=True)
+    parser.add_argument('--experiment', choices=('all',) + EXPERIMENTS + tuple(SGX_SHARDS), required=True)
     parser.add_argument('--repeats', type=int, required=True)
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()

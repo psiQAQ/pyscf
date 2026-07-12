@@ -17,6 +17,9 @@ on:
           - ucasscf
           - sa4-newton
           - sgx
+          - sgx-pbe0
+          - sgx-hse06
+          - sgx-wb97x
           - tddft
           - analyze
       repeats:

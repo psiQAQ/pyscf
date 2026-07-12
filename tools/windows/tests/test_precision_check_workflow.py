@@ -86,6 +86,16 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         self.assertEqual(module.pbc_tda_status(1e-11, 5e-4), 'pass')
         self.assertEqual(module.pbc_tda_status(1e-3, 5e-4), 'reference_mismatch')
 
+    def test_sgx_formal_shards_select_one_xc(self):
+        spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.assertEqual(module.sgx_xcs('sgx'), ('PBE0', 'HSE06', 'WB97X'))
+        self.assertEqual(module.sgx_xcs('sgx-hse06'), ('HSE06',))
+        workflow = DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')
+        for experiment in ('sgx-pbe0', 'sgx-hse06', 'sgx-wb97x'):
+            self.assertIn(f'          - {experiment}', workflow)
+
     def test_paired_runner_sets_thread_environment_and_separates_outputs(self):
         spec = importlib.util.spec_from_file_location('run_paired_precision_diagnostics', PAIRED_DIAGNOSTICS_RUNNER)
         module = importlib.util.module_from_spec(spec)
