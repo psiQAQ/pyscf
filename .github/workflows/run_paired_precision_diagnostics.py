@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Run precision diagnostics with one and four threads on the same runner."""
+"""Run paired or OpenMP/BLAS-split precision diagnostics on one runner."""
 
 import argparse
 import json
@@ -10,12 +10,23 @@ import time
 from pathlib import Path
 
 
-THREAD_VARIABLES = (
-    'OMP_NUM_THREADS',
+BLAS_VARIABLES = (
     'OPENBLAS_NUM_THREADS',
     'MKL_NUM_THREADS',
     'VECLIB_MAXIMUM_THREADS',
 )
+THREAD_VARIABLES = ('OMP_NUM_THREADS',) + BLAS_VARIABLES
+
+
+def execution_profiles(experiment):
+    if experiment.startswith('split-'):
+        return experiment[len('split-'):], (
+            ('omp1-blas1', 1, 1),
+            ('omp4-blas1', 4, 1),
+            ('omp1-blas4', 1, 4),
+            ('omp4-blas4', 4, 4),
+        )
+    return experiment, (('t1', 1, 1), ('t4', 4, 4))
 
 
 def parse_args(argv=None):
@@ -31,28 +42,34 @@ def parse_args(argv=None):
 def main(argv=None):
     args = parse_args(argv)
     args.output.mkdir(parents=True, exist_ok=True)
+    experiment, profiles = execution_profiles(args.experiment)
     metadata = {
-        'experiment': args.experiment,
+        'experiment': experiment,
+        'requested_experiment': args.experiment,
         'repeats': args.repeats,
         'python': args.python,
         'script': args.script,
         'runs': [],
     }
     metadata_path = args.output / 'paired-runs.json'
-    for threads in (1, 4):
+    for profile, omp_threads, blas_threads in profiles:
         env = os.environ.copy()
-        env.update({key: str(threads) for key in THREAD_VARIABLES})
-        output = args.output / f't{threads}'
+        env['OMP_NUM_THREADS'] = str(omp_threads)
+        env.update({key: str(blas_threads) for key in BLAS_VARIABLES})
+        output = args.output / profile
         started = time.monotonic()
         command = [
             args.python, args.script,
-            '--experiment', args.experiment,
+            '--experiment', experiment,
             '--repeats', str(args.repeats),
             '--output', str(output),
         ]
         result = subprocess.run(command, env=env, check=False)
         metadata['runs'].append({
-            'threads': threads,
+            'profile': profile,
+            'threads': omp_threads if omp_threads == blas_threads else None,
+            'omp_threads': omp_threads,
+            'blas_threads': blas_threads,
             'elapsed_seconds': time.monotonic() - started,
             'returncode': result.returncode,
             'output': str(output),

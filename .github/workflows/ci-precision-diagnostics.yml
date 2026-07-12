@@ -22,6 +22,12 @@ on:
           - sgx-wb97x
           - tddft
           - analyze
+          - split-eom
+          - split-ucasscf
+          - split-sa4-newton
+          - split-tddft
+          - split-analyze
+          - split-pbc-hse03
       repeats:
         description: Maximum outer repetitions per diagnostic family
         required: true
@@ -74,7 +80,7 @@ jobs:
       - name: Publish paired summaries
         if: always()
         run: |
-          for summary in tmp/precision-thread-paired/${{ inputs.experiment }}/t*/summary.md; do
+          for summary in tmp/precision-thread-paired/${{ inputs.experiment }}/*/summary.md; do
             if [ -f "$summary" ]; then cat "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
           done
       - name: Upload Linux paired artifact
@@ -119,7 +125,7 @@ jobs:
       - name: Publish paired summaries
         if: always()
         run: |
-          for summary in tmp/precision-thread-paired/${{ inputs.experiment }}/t*/summary.md; do
+          for summary in tmp/precision-thread-paired/${{ inputs.experiment }}/*/summary.md; do
             if [ -f "$summary" ]; then cat "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
           done
       - name: Upload macOS paired artifact
@@ -172,7 +178,7 @@ jobs:
       - name: Publish paired summaries
         if: always()
         run: |
-          Get-ChildItem "tmp/precision-thread-paired/${{ inputs.experiment }}/t*/summary.md" -ErrorAction SilentlyContinue |
+          Get-ChildItem "tmp/precision-thread-paired/${{ inputs.experiment }}/*/summary.md" -ErrorAction SilentlyContinue |
             ForEach-Object { Get-Content $_ | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
       - name: Upload Windows paired artifact
         if: always()

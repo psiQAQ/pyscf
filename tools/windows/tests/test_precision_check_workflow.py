@@ -166,6 +166,48 @@ keys = ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS', 'VECLIB_MA
             ))
             self.assertEqual(code, 9)
 
+    def test_split_runner_separates_openmp_and_blas_threads(self):
+        spec = importlib.util.spec_from_file_location('run_paired_precision_diagnostics', PAIRED_DIAGNOSTICS_RUNNER)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        fake = '''
+import argparse, json, os, pathlib
+parser = argparse.ArgumentParser()
+parser.add_argument('--experiment')
+parser.add_argument('--repeats')
+parser.add_argument('--output')
+args = parser.parse_args()
+output = pathlib.Path(args.output)
+output.mkdir(parents=True, exist_ok=True)
+keys = ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS', 'VECLIB_MAXIMUM_THREADS')
+(output / 'observed.json').write_text(json.dumps({
+    'experiment': args.experiment,
+    'threads': {key: os.environ.get(key) for key in keys},
+}))
+'''
+        expected = {
+            'omp1-blas1': ('1', '1'),
+            'omp4-blas1': ('4', '1'),
+            'omp1-blas4': ('1', '4'),
+            'omp4-blas4': ('4', '4'),
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            script = root / 'fake.py'
+            script.write_text(fake, encoding='utf-8')
+            code = module.main((
+                '--python', sys.executable, '--script', str(script),
+                '--experiment', 'split-eom', '--repeats', '1', '--output', str(root / 'out'),
+            ))
+            self.assertEqual(code, 0)
+            for profile, (omp_threads, blas_threads) in expected.items():
+                observed = json.loads((root / 'out' / profile / 'observed.json').read_text())
+                self.assertEqual(observed['experiment'], 'eom')
+                self.assertEqual(observed['threads']['OMP_NUM_THREADS'], omp_threads)
+                self.assertEqual(set(observed['threads'][key] for key in module.BLAS_VARIABLES), {blas_threads})
+            metadata = json.loads((root / 'out' / 'paired-runs.json').read_text())
+            self.assertEqual([run['profile'] for run in metadata['runs']], list(expected))
+
     def test_paired_workflow_builds_once_for_seven_platform_pairs(self):
         text = PAIRED_DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')
         self.assertFalse((WORKFLOW_DIR / 'ci-precision-thread-paired.yml').exists())
@@ -180,6 +222,10 @@ keys = ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS', 'VECLIB_MA
         self.assertIn('python-version: ["3.12", "3.13"]', text)
         self.assertIn('run_paired_precision_diagnostics.py', text)
         self.assertIn('-Paired', text)
+        for experiment in ('split-eom', 'split-ucasscf', 'split-sa4-newton',
+                           'split-tddft', 'split-analyze', 'split-pbc-hse03'):
+            self.assertIn(f'          - {experiment}', text)
+        self.assertIn('${{ inputs.experiment }}/*/summary.md', text)
 
     def test_check_workflow_replaces_old_precision_workflow(self):
         self.assertTrue(WORKFLOW.exists())
