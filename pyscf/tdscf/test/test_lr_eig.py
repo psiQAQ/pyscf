@@ -94,6 +94,42 @@ class KnownValues(unittest.TestCase):
         self.assertTrue(converged[0])
         self.assertAlmostEqual(energy[0], 0.9991663794740591, 12)
 
+    def test_real_eig_restarts_when_residual_basis_is_dependent(self):
+        a = numpy.diag([1.0, 2.0, 3.0])
+        b = numpy.array([[0.0, 0.05, 0.0], [0.05, 0.0, 0.02], [0.0, 0.02, 0.0]])
+        matrix = numpy.block([[a, b], [-b, -a]])
+        hdiag = numpy.r_[numpy.diag(a), -numpy.diag(a)]
+
+        def aop(x):
+            return numpy.asarray(x).dot(matrix.T)
+
+        def precond(dx, energy):
+            denominator = hdiag[None, :] - numpy.asarray(energy)[:, None]
+            denominator[abs(denominator) < 1e-8] = 1e-8
+            return dx / denominator
+
+        orthogonalize = _lr_eig.VW_Gram_Schmidt_fill_holder
+        empty_calls = 0
+
+        def empty_expanded_basis_once(*args, **kwargs):
+            nonlocal empty_calls
+            if args[0].shape[1] == 2 and empty_calls < 2:
+                empty_calls += 1
+                size = args[2].shape[0]
+                return numpy.zeros((0, size)), numpy.zeros((0, size))
+            return orthogonalize(*args, **kwargs)
+
+        guess = numpy.array([[1.0, 1.0, 0.0, 0.0, 0.0, 0.0]])
+        with mock.patch.object(_lr_eig, 'VW_Gram_Schmidt_fill_holder', empty_expanded_basis_once):
+            converged, energy, _ = _lr_eig.real_eig(
+                aop, guess, precond, nroots=1, tol_residual=1e-9, max_cycle=30,
+                verbose=logger.Logger(sys.stdout, logger.QUIET),
+            )
+
+        self.assertEqual(empty_calls, 2)
+        self.assertTrue(converged[0])
+        self.assertAlmostEqual(energy[0], 0.9991663794740591, 12)
+
 
 if __name__ == '__main__':
     unittest.main()

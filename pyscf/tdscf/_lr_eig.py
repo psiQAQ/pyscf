@@ -729,7 +729,10 @@ def real_eig(aop, x0, precond, tol_residual=1e-5, nroots=1, x0sym=None, pick=Non
                 R_x[:,r_index].copy(), R_y[:,r_index].copy(), lindep)
         if len(V) == 0:
             log.debug(f'Linear dependency in trial subspace. |r| for each state {r_norms}')
-            break
+            if fresh_start:
+                break
+            fresh_start = True
+            continue
 
         log.debug1('Generate %d trial vectors. Drop %d vectors',
                    len(V), r_norms.size - len(V))
