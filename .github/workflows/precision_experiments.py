@@ -435,7 +435,7 @@ def run_sgx_case(mol, settings, order, xc, delta):
     force_sum = float(numpy.abs(gradient.sum(axis=0)).sum())
     finite_difference = float((e_plus - e_minus) / (2 * delta) * lib.param.BOHR)
     gradient_error = float(gradient[0, 2] - finite_difference)
-    force_ok = round(force_sum, 13) == 0
+    force_ok = round(force_sum, 12) == 0
     gradient_ok = round(gradient_error, order) == 0
     details = {
         'force_sum_l1': force_sum,

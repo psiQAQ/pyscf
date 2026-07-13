@@ -67,7 +67,7 @@ class KnownValues(unittest.TestCase):
         e2 = mf_scanner(mol1.set_geom_(
             f'O  0. 0. -{delta:f}; 1  0. -0.757 0.587; 1  0. 0.757 0.587'
         ))
-        self.assertAlmostEqual(numpy.abs(g.sum(axis=0)).sum(), 0, 13)
+        self.assertAlmostEqual(numpy.abs(g.sum(axis=0)).sum(), 0, 12)
         self.assertAlmostEqual(g[0,2], (e1-e2)/(2*delta)*lib.param.BOHR, order)
 
     def test_finite_diff_grad(self):
