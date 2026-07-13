@@ -914,7 +914,7 @@ def run_analyze(args, recorder):
                 atom='O 0 0 0; H 0 -0.757 0.587; H 0 0.757 0.587',
                 basis='631g', spin=2, verbose=4, output=str(log_path))
             mf = scf.UHF(mol).run()
-            td = tdscf.TDHF(mf).run(conv_tol=1e-6)
+            td = tdscf.TDHF(mf).set(verbose=5).run(conv_tol=1e-6)
             length = td.oscillator_strength(gauge='length')
             velocity = td.oscillator_strength(gauge='velocity', order=2)
             length_error = float(abs(lib.fp(length) - length_reference))
