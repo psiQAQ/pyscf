@@ -418,6 +418,7 @@ def update_orb_ci(casscf, mo, ci0, eris, x0_guess=None,
     else:
         ci0 = [c.ravel () for c in ci0]
     g_all, g_update, h_op, h_diag = gen_g_hop(casscf, mo, ci0, eris)
+    g_kf = g_all
     ngorb = numpy.count_nonzero (casscf.uniq_var_indices (nmo, casscf.ncore, casscf.ncas, casscf.frozen))
     norm_gkf = norm_gall = numpy.linalg.norm(g_all)
     log.debug('    |g|=%5.3g (%4.3g %4.3g) (keyframe)', norm_gall,
@@ -491,10 +492,12 @@ def update_orb_ci(casscf, mo, ci0, eris, x0_guess=None,
             log.debug1('Set max_cycle %d', max_cycle)
             ikf += 1
             if stat.imic > 3 and norm_gall > norm_gkf*casscf.ah_grad_trust_region:
-                g_all = g_all - hdxi
-                dr -= dxi
-                norm_gall = numpy.linalg.norm(g_all)
-                log.debug('|g| >> keyframe, Restore previouse step')
+                g_all = g_kf
+                dr[:] = 0
+                norm_gall = norm_gkf
+                norm_gorb = numpy.linalg.norm(g_all[:ngorb])
+                norm_gci = numpy.linalg.norm(g_all[ngorb:])
+                log.debug('|g| >> keyframe, Restore keyframe')
                 break
 
             elif (stat.imic >= max_cycle or norm_gall < conv_tol_grad*.3):
@@ -521,6 +524,7 @@ def update_orb_ci(casscf, mo, ci0, eris, x0_guess=None,
                     # close to solution
                     or norm_gkf1 < conv_tol_grad*casscf.ah_grad_trust_region):
                     g_all = g_kf1
+                    g_kf = g_all
                     g_kf1 = None
                     norm_gall = norm_gkf = norm_gkf1
                 else:
