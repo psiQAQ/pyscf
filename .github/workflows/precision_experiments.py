@@ -1193,10 +1193,12 @@ def run_sa4_newton(args, recorder):
                 basis='631g', verbose=4, output=str(log_path))
             mf = scf.RHF(mol).set(conv_tol=1e-10).run()
             ref = mcscf.CASSCF(mf, 4, 4).state_average_([.25] * 4)
+            ref.conv_tol = 1e-10
             ref.chkfile = str(checkpoints / 'sa4-reference-current.chk')
             mo_ref = ref.sort_mo([4, 5, 6, 10], base=1)
             ref.kernel(mo_ref)
             newton = mcscf.CASSCF(mf, 4, 4).state_average_([.25] * 4).newton()
+            newton.conv_tol = 1e-10
             newton.verbose = 5
             newton.chkfile = str(checkpoints / 'sa4-newton-current.chk')
             mo_newton = newton.sort_mo([4, 5, 6, 10], base=1)

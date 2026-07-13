@@ -69,6 +69,7 @@ def tearDownModule():
 class KnownValues(unittest.TestCase):
     def test_nosymm_sa4_newton (self):
         mc = mcscf.CASSCF (m, 4, 4).state_average_([0.25,]*4).newton ()
+        mc.conv_tol = 1e-10
         mo = mc.sort_mo([4,5,6,10], base=1)
         mc.kernel(mo)
         self.assertAlmostEqual (mc.e_tot, mc_ref.e_tot, 8)
