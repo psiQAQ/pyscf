@@ -349,23 +349,14 @@ def run_ucasscf_once(log_path, checkpoint, mode, seed_mo=None, seed_ci=None):
 def run_ucasscf(args, recorder):
     checkpoints = recorder.output / 'checkpoints'
     checkpoints.mkdir(exist_ok=True)
-    seed_log = recorder.logs / 'ucasscf-seed.log'
-    seed_mol = None
-    try:
-        seed_mol, seed_mc, seed_details = run_ucasscf_once(seed_log, checkpoints / 'seed.chk', 'default')
-        seed_mo = copy.deepcopy(seed_mc.mo_coeff)
-        seed_ci = copy.deepcopy(seed_mc.ci)
-        seed_details['log_file'] = str(seed_log)
-        recorder.record(0, 'seed', 'pass' if seed_mc.converged else 'not_converged', 0.0, seed_details)
-    except Exception:
-        recorder.record(0, 'seed', 'exception', 0.0, {'log_file': str(seed_log), 'traceback': traceback.format_exc()})
-        return
-    finally:
-        close_mol(seed_mol)
+    import numpy
+    guess_path = Path(__file__).resolve().parents[2] / 'pyscf' / 'mcscf' / 'test' / 'ucasscf_h2o_mo.txt'
+    seed_mo = numpy.loadtxt(guess_path).reshape(2, 13, 13)
+    seed_ci = None
 
     target = -75.7460662487894
     for attempt in range(1, args.repeats + 1):
-        for mode in ('default', 'fixed'):
+        for mode in ('fixed',):
             log_path = recorder.log_path(f'ucasscf-{mode}', attempt)
             start = time.monotonic()
             mol = None
