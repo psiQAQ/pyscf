@@ -23,6 +23,41 @@ from pyscf.tdscf import _lr_eig
 
 
 class KnownValues(unittest.TestCase):
+    def test_real_eig_restarts_after_singular_subspace(self):
+        a = numpy.diag([1.0, 2.0, 3.0])
+        b = numpy.array([[0.0, 0.05, 0.0], [0.05, 0.0, 0.02], [0.0, 0.02, 0.0]])
+        matrix = numpy.block([[a, b], [-b, -a]])
+        hdiag = numpy.r_[numpy.diag(a), -numpy.diag(a)]
+
+        def aop(x):
+            return numpy.asarray(x).dot(matrix.T)
+
+        def precond(dx, energy):
+            denominator = hdiag[None, :] - numpy.asarray(energy)[:, None]
+            denominator[abs(denominator) < 1e-8] = 1e-8
+            return dx / denominator
+
+        subspace_solver = _lr_eig.TDDFT_subspace_eigen_solver
+        failed = False
+
+        def fail_full_subspace_once(*args, **kwargs):
+            nonlocal failed
+            if args[0].shape[0] == 3 and not failed:
+                failed = True
+                raise numpy.linalg.LinAlgError('singular subspace metric')
+            return subspace_solver(*args, **kwargs)
+
+        guess = numpy.array([[1.0, 1.0, 0.0, 0.0, 0.0, 0.0]])
+        with mock.patch.object(_lr_eig, 'TDDFT_subspace_eigen_solver', fail_full_subspace_once):
+            converged, energy, _ = _lr_eig.real_eig(
+                aop, guess, precond, nroots=1, tol_residual=1e-9, max_cycle=30,
+                verbose=logger.Logger(sys.stdout, logger.QUIET),
+            )
+
+        self.assertTrue(failed)
+        self.assertTrue(converged[0])
+        self.assertAlmostEqual(energy[0], 0.9991663794740591, 12)
+
     def test_real_eig_uses_raw_residual_when_preconditioned_basis_is_dependent(self):
         a = numpy.diag([1.0, 2.0, 3.0])
         b = numpy.array([[0.0, 0.05, 0.0], [0.05, 0.0, 0.02], [0.0, 0.02, 0.0]])
