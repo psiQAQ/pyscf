@@ -36,7 +36,7 @@ NODEIDS = {
 
 
 def base_experiment(experiment):
-    if experiment == 'pbc-tdhf-replay':
+    if experiment in ('pbc-tdhf-replay', 'pbc-tdhf-fixture-bank'):
         return 'pbc-tdhf'
     return 'sgx' if experiment.startswith('sgx-') else experiment
 
@@ -466,7 +466,7 @@ SGX_SHARDS = {
     'sgx-wb97x': ('WB97X',),
 }
 CONTROL_EXPERIMENTS = ('sgx-hse06-control',)
-REPLAY_EXPERIMENTS = ('pbc-tdhf-replay',)
+REPLAY_EXPERIMENTS = ('pbc-tdhf-replay', 'pbc-tdhf-fixture-bank')
 
 
 def sgx_xcs(experiment):
@@ -801,15 +801,27 @@ def run_pbc_tdhf_replay(args, recorder):
     from pyscf.data.nist import HARTREE2EV
     from pyscf.lib import logger
 
-    fixture = Path(args.fixture) if args.fixture is not None else recorder.output / 'fixture.npz'
-    if args.fixture is None:
-        create_pbc_tdhf_fixture(fixture)
-    fixture_path = fixture.resolve()
-    fixture_sha256 = hashlib.sha256(fixture_path.read_bytes()).hexdigest()
-    with numpy.load(fixture_path) as fixture:
-        arrays = {name: numpy.array(fixture[name], copy=True) for name in fixture.files}
-    nroots = int(arrays['nroots'])
-    for attempt in range(1, args.repeats + 1):
+    if recorder.experiment == 'pbc-tdhf-fixture-bank':
+        fixture_root = Path(args.fixture) if args.fixture is not None else recorder.output / 'fixtures'
+        if args.fixture is None:
+            fixture_root.mkdir(parents=True, exist_ok=True)
+            for attempt in range(1, args.repeats + 1):
+                create_pbc_tdhf_fixture(fixture_root / f'fixture-{attempt:04d}.npz')
+        fixture_paths = sorted(fixture_root.glob('fixture-*.npz'))
+        if len(fixture_paths) != args.repeats:
+            raise ValueError(f'expected {args.repeats} fixtures, found {len(fixture_paths)} in {fixture_root}')
+    else:
+        fixture = Path(args.fixture) if args.fixture is not None else recorder.output / 'fixture.npz'
+        if args.fixture is None:
+            create_pbc_tdhf_fixture(fixture)
+        fixture_paths = [fixture] * args.repeats
+
+    for attempt, fixture_path in enumerate(fixture_paths, 1):
+        fixture_path = fixture_path.resolve()
+        fixture_sha256 = hashlib.sha256(fixture_path.read_bytes()).hexdigest()
+        with numpy.load(fixture_path) as fixture:
+            arrays = {name: numpy.array(fixture[name], copy=True) for name in fixture.files}
+        nroots = int(arrays['nroots'])
         log_path = recorder.log_path('fixed-matrix', attempt)
         start = time.monotonic()
         try:

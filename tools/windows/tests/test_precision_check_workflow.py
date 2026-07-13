@@ -180,7 +180,9 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         spec.loader.exec_module(module)
         workflow = DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')
         self.assertIn('pbc-tdhf-replay', module.REPLAY_EXPERIMENTS)
+        self.assertIn('pbc-tdhf-fixture-bank', module.REPLAY_EXPERIMENTS)
         self.assertIn('          - split-pbc-tdhf-replay', workflow)
+        self.assertIn('          - split-pbc-tdhf-fixture-bank', workflow)
 
         paired_spec = importlib.util.spec_from_file_location(
             'run_paired_precision_diagnostics', PAIRED_DIAGNOSTICS_RUNNER)
@@ -190,6 +192,35 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
             'split-pbc-tdhf-replay', 'omp1-blas1,omp4-blas4')
         self.assertEqual(experiment, 'pbc-tdhf-replay')
         self.assertEqual([item[0] for item in profiles], ['omp1-blas1', 'omp4-blas4'])
+
+    def test_pbc_tdhf_fixture_bank_creates_one_fixture_per_attempt(self):
+        import numpy
+        from types import SimpleNamespace
+        from unittest import mock
+
+        spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        def create_fixture(path):
+            value = float(int(path.stem.rsplit('-', 1)[1]))
+            numpy.savez_compressed(
+                path, a=numpy.asarray([[value]]), b=numpy.zeros((1, 1)),
+                x0=numpy.asarray([[1.0, 0.0]]), hdiag=numpy.asarray([value, -value]),
+                reference=numpy.asarray([value]), nroots=numpy.asarray(1))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            recorder = module.Recorder('pbc-tdhf-fixture-bank', root / 'output')
+            try:
+                with mock.patch.object(module, 'create_pbc_tdhf_fixture', side_effect=create_fixture) as creator:
+                    module.run_pbc_tdhf_replay(SimpleNamespace(repeats=2, fixture=None), recorder)
+                self.assertEqual(creator.call_count, 2)
+            finally:
+                recorder.finish()
+            self.assertEqual([record['attempt'] for record in recorder.records], [1, 2])
+            self.assertEqual(len({record['details']['fixture_sha256'] for record in recorder.records}), 2)
+            self.assertTrue((recorder.output / 'fixtures' / 'fixture-0002.npz').is_file())
 
     def test_pbc_tdhf_replay_dispatches_dedicated_runner(self):
         from types import SimpleNamespace
@@ -334,26 +365,27 @@ parser.add_argument('--fixture')
 args = parser.parse_args()
 output = pathlib.Path(args.output)
 output.mkdir(parents=True, exist_ok=True)
-fixture = pathlib.Path(args.fixture) if args.fixture else output / 'fixture.npz'
+bank = args.experiment == 'pbc-tdhf-fixture-bank'
+fixture = pathlib.Path(args.fixture) if args.fixture else output / ('fixtures' if bank else 'fixture.npz')
 if not args.fixture:
-    fixture.write_bytes(b'fixture')
+    fixture.mkdir() if bank else fixture.write_bytes(b'fixture')
 (output / 'fixture-path.txt').write_text(str(fixture.resolve()), encoding='utf-8')
 '''
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             script = root / 'fake.py'
             script.write_text(fake, encoding='utf-8')
-            output = root / 'out'
-            code = module.main((
-                '--python', sys.executable, '--script', str(script),
-                '--experiment', 'split-pbc-tdhf-replay',
-                '--profiles', 'omp1-blas1,omp4-blas4',
-                '--repeats', '1', '--output', str(output),
-            ))
-            self.assertEqual(code, 0)
-            first = (output / 'omp1-blas1' / 'fixture-path.txt').read_text(encoding='utf-8')
-            second = (output / 'omp4-blas4' / 'fixture-path.txt').read_text(encoding='utf-8')
-            self.assertEqual(second, first)
+            for experiment in ('split-pbc-tdhf-replay', 'split-pbc-tdhf-fixture-bank'):
+                with self.subTest(experiment=experiment):
+                    output = root / experiment
+                    code = module.main((
+                        '--python', sys.executable, '--script', str(script), '--experiment', experiment,
+                        '--profiles', 'omp1-blas1,omp4-blas4', '--repeats', '2', '--output', str(output),
+                    ))
+                    self.assertEqual(code, 0)
+                    first = (output / 'omp1-blas1' / 'fixture-path.txt').read_text(encoding='utf-8')
+                    second = (output / 'omp4-blas4' / 'fixture-path.txt').read_text(encoding='utf-8')
+                    self.assertEqual(second, first)
 
     def test_split_runner_separates_openmp_and_blas_threads(self):
         spec = importlib.util.spec_from_file_location('run_paired_precision_diagnostics', PAIRED_DIAGNOSTICS_RUNNER)

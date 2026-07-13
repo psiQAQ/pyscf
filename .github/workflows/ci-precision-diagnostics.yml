@@ -29,6 +29,7 @@ on:
           - split-analyze
           - split-pbc-hse03
           - split-pbc-tdhf-replay
+          - split-pbc-tdhf-fixture-bank
           - split-sgx-pbe0
           - split-sgx-hse06
           - split-sgx-hse06-control

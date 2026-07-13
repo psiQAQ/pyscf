@@ -92,9 +92,9 @@ def main(argv=None):
         metadata_path.write_text(json.dumps(metadata, indent=2), encoding='utf-8')
         if result.returncode:
             return result.returncode
-        if experiment == 'pbc-tdhf-replay' and shared_fixture is None:
-            shared_fixture = output / 'fixture.npz'
-            if not shared_fixture.is_file():
+        if experiment in ('pbc-tdhf-replay', 'pbc-tdhf-fixture-bank') and shared_fixture is None:
+            shared_fixture = output / ('fixtures' if experiment == 'pbc-tdhf-fixture-bank' else 'fixture.npz')
+            if not shared_fixture.exists():
                 raise FileNotFoundError(f'replay fixture was not created: {shared_fixture}')
     return 0
 
