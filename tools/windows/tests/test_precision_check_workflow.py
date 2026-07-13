@@ -193,6 +193,48 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         self.assertEqual(experiment, 'pbc-tdhf-replay')
         self.assertEqual([item[0] for item in profiles], ['omp1-blas1', 'omp4-blas4'])
 
+    def test_pbc_tdhf_native_replay_is_dispatchable(self):
+        from types import SimpleNamespace
+        from unittest import mock
+
+        spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        workflow = DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')
+        self.assertEqual(module.base_experiment('pbc-tdhf-native-replay'), 'pbc-tdhf')
+        self.assertIn('          - split-pbc-tdhf-native-replay', workflow)
+
+        def record_once(args, recorder):
+            recorder.record(1, 'native-replay', 'pass', 0.0, {})
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(module, 'run_pbc_tdhf_native_replay', side_effect=record_once) as runner:
+                module.run_experiment(
+                    'pbc-tdhf-native-replay', SimpleNamespace(repeats=1), pathlib.Path(tmp))
+            runner.assert_called_once()
+
+    def test_pbc_tdhf_native_replay_compares_same_operator_and_marks_native_failure(self):
+        import numpy
+        from pyscf.data.nist import HARTREE2EV
+
+        spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        a = numpy.asarray([[2.0]])
+        b = numpy.zeros((1, 1))
+        matrix = numpy.block([[a, b], [-b, -a]])
+        x0 = numpy.asarray([[1.0, 0.0]])
+        result = module.compare_pbc_tdhf_native_replay(
+            lambda vectors: numpy.asarray(vectors).dot(matrix.T),
+            numpy.asarray([2.1]), numpy.asarray([True]),
+            a, b, x0, numpy.asarray([2.0, -2.0]),
+            numpy.asarray([2.0 * HARTREE2EV]), nroots=1,
+        )
+        self.assertEqual(result['status'], 'reference_mismatch')
+        self.assertAlmostEqual(result['operator_action_error'], 0.0)
+        self.assertAlmostEqual(result['replay_reference_error_ev'], 0.0)
+        self.assertAlmostEqual(result['native_replay_error_hartree'], 0.1)
+
     def test_pbc_tdhf_fixture_bank_creates_one_fixture_per_attempt(self):
         import numpy
         from types import SimpleNamespace

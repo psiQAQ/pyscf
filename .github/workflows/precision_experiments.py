@@ -36,7 +36,7 @@ NODEIDS = {
 
 
 def base_experiment(experiment):
-    if experiment in ('pbc-tdhf-replay', 'pbc-tdhf-fixture-bank'):
+    if experiment in ('pbc-tdhf-replay', 'pbc-tdhf-fixture-bank', 'pbc-tdhf-native-replay'):
         return 'pbc-tdhf'
     return 'sgx' if experiment.startswith('sgx-') else experiment
 
@@ -467,6 +467,7 @@ SGX_SHARDS = {
 }
 CONTROL_EXPERIMENTS = ('sgx-hse06-control',)
 REPLAY_EXPERIMENTS = ('pbc-tdhf-replay', 'pbc-tdhf-fixture-bank')
+NATIVE_REPLAY_EXPERIMENTS = ('pbc-tdhf-native-replay',)
 
 
 def sgx_xcs(experiment):
@@ -796,6 +797,42 @@ def replay_pbc_tdhf_matrix(a, b, x0, hdiag, nroots=5, tol_residual=1e-8,
     }
 
 
+def compare_pbc_tdhf_native_replay(native_vind, native_roots, native_converged,
+                                    a, b, x0, hdiag, reference_ev, nroots=5):
+    import numpy
+    from pyscf.data.nist import HARTREE2EV
+
+    matrix = numpy.block([[a, b], [-b.conj(), -a.conj()]])
+    native_action = numpy.asarray(native_vind(numpy.array(x0, copy=True)))
+    explicit_action = numpy.asarray(x0).dot(matrix.T)
+    replay = replay_pbc_tdhf_matrix(a, b, x0, hdiag, nroots=nroots,
+                                    tol_residual=1e-8, max_cycle=100, verbose=0)
+    native_roots = numpy.asarray(native_roots)
+    reference_count = len(reference_ev)
+    direct_count = min(4, len(native_roots), len(replay['direct_roots']))
+    native_reference_error = float(abs(
+        native_roots[:reference_count] * HARTREE2EV - reference_ev).max())
+    native_direct_error = float(abs(
+        native_roots[:direct_count] - replay['direct_roots'][:direct_count]).max())
+    replay_reference_error = float(abs(
+        replay['iterative_roots'][:reference_count] * HARTREE2EV - reference_ev).max())
+    replay_direct_error = float(abs(
+        replay['iterative_roots'][:direct_count] - replay['direct_roots'][:direct_count]).max())
+    passed = native_reference_error < 5e-5 and native_direct_error < 5e-8
+    converged = all_true(native_converged)
+    return {
+        'status': 'pass' if passed else ('not_converged' if not converged else 'reference_mismatch'),
+        'operator_action_error': float(abs(native_action - explicit_action).max()),
+        'native_replay_error_hartree': float(abs(
+            native_roots[:direct_count] - replay['iterative_roots'][:direct_count]).max()),
+        'native_reference_error_ev': native_reference_error,
+        'native_direct_error_hartree': native_direct_error,
+        'replay_reference_error_ev': replay_reference_error,
+        'replay_direct_error_hartree': replay_direct_error,
+        'replay': replay,
+    }
+
+
 def run_pbc_tdhf_replay(args, recorder):
     import numpy
     from pyscf.data.nist import HARTREE2EV
@@ -980,6 +1017,70 @@ def run_pbc_tdhf(args, recorder):
             break
 
 
+@pbc_test_grid_settings()
+def run_pbc_tdhf_native_replay(args, recorder):
+    import numpy
+    from pyscf.pbc import scf
+
+    reference = numpy.asarray((9.09165361, 11.51362009))
+    for attempt in range(1, args.repeats + 1):
+        log_path = recorder.log_path('native-replay', attempt)
+        start = time.monotonic()
+        cell = None
+        try:
+            cell = build_diamond_cell(log_path, 'gth-hf-rev')
+            history = []
+            mf = scf.UKS(cell).set(xc='m06').rs_density_fit(auxbasis='weigend')
+            mf.callback = lambda envs: history.append({
+                key: json_value(envs.get(key)) for key in ('cycle', 'e_tot', 'norm_ddm')
+            })
+            mf.kernel()
+            td = mf.TDDFT().set(nstates=5, conv_tol=1e-8)
+            a_blocks, b_blocks = td.get_ab()
+            a = spin_orbital_a(a_blocks)
+            b = spin_orbital_b(b_blocks)
+            native_vind, hdiag = td.gen_vind(mf)
+            x0 = td.get_init_guess(mf, 5)
+            td.kernel(x0=numpy.array(x0, copy=True))
+            comparison = compare_pbc_tdhf_native_replay(
+                native_vind, td.e, td.converged, a, b, x0, hdiag, reference, nroots=5)
+            status = comparison.pop('status')
+            replay = comparison.pop('replay')
+            error = max(comparison['native_reference_error_ev'], comparison['native_direct_error_hartree'])
+            signature = ('pbc-tdhf-native-replay-pass' if status == 'pass' else
+                         f'pbc-tdhf-native-replay-{status}-{error_bucket(error)}')
+            snapshot = snapshot_arrays(
+                density=mf.make_rdm1(), mo_coeff=mf.mo_coeff, mo_energy=mf.mo_energy,
+                a=a, b=b, x0=x0, hdiag=hdiag, native_td_e=td.e, native_xy=td.xy,
+                replay_roots=replay['iterative_roots'], replay_vectors=replay['vectors'])
+            recorder.record(attempt, 'native-replay', status, time.monotonic() - start, {
+                'scf': scf_details(mf, history),
+                'native_roots': td.e,
+                'native_converged': td.converged,
+                'native_residuals': td_residuals(td),
+                'replay_roots': replay['iterative_roots'],
+                'replay_converged': replay['converged'],
+                'replay_residuals': replay['residuals'],
+                'direct_roots': replay['direct_roots'],
+                'a': array_metadata(a),
+                'b': array_metadata(b),
+                'x0': array_metadata(x0),
+                'hdiag': array_metadata(hdiag),
+                **comparison,
+                'failure_signature': signature if status != 'pass' else None,
+                'snapshot_file': recorder.save_snapshot_once(status, signature, snapshot),
+                'log_file': str(log_path),
+            })
+        except Exception:
+            recorder.record(attempt, 'native-replay', 'exception', time.monotonic() - start, {
+                'log_file': str(log_path), 'traceback': traceback.format_exc(),
+            })
+        finally:
+            close_mol(cell)
+        if experiment_complete(recorder):
+            break
+
+
 def spin_orbital_a(a):
     import numpy
     aa, ab, bb = a
@@ -988,6 +1089,16 @@ def spin_orbital_a(a):
     ab = ab.reshape(noa * nva, nob * nvb)
     bb = bb.reshape(nob * nvb, nob * nvb)
     return numpy.block([[aa, ab], [ab.conj().T, bb]])
+
+
+def spin_orbital_b(b):
+    import numpy
+    aa, ab, bb = b
+    noa, nva, nob, nvb = ab.shape
+    aa = aa.reshape(noa * nva, noa * nva)
+    ab = ab.reshape(noa * nva, nob * nvb)
+    bb = bb.reshape(nob * nvb, nob * nvb)
+    return numpy.block([[aa, ab], [ab.T, bb]])
 
 
 def pbc_tda_status(direct_error, tolerance):
@@ -1217,6 +1328,8 @@ def run_experiment(experiment, args, output):
     try:
         if experiment in CONTROL_EXPERIMENTS:
             run_sgx_hse06_control(args, recorder)
+        elif experiment in NATIVE_REPLAY_EXPERIMENTS:
+            run_pbc_tdhf_native_replay(args, recorder)
         elif experiment in REPLAY_EXPERIMENTS:
             run_pbc_tdhf_replay(args, recorder)
         elif experiment == 'sgx' or experiment in SGX_SHARDS:
@@ -1259,7 +1372,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--experiment', choices=(
-            ('all',) + EXPERIMENTS + tuple(SGX_SHARDS) + CONTROL_EXPERIMENTS + REPLAY_EXPERIMENTS),
+            ('all',) + EXPERIMENTS + tuple(SGX_SHARDS) + CONTROL_EXPERIMENTS +
+            REPLAY_EXPERIMENTS + NATIVE_REPLAY_EXPERIMENTS),
         required=True)
     parser.add_argument('--repeats', type=int, required=True)
     parser.add_argument('--output', type=Path, required=True)
