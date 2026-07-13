@@ -571,6 +571,7 @@ def run_tddft(args, recorder):
             })
             mf.kernel()
             td = mf.TDDFT()
+            td.verbose = 5
             energies = td.kernel(nstates=4)[0]
             a, b = td.get_ab()
             direct_roots = direct_tddft_roots(a, b, 5)
