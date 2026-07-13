@@ -835,6 +835,7 @@ def run_sa4_newton(args, recorder):
             mo_ref = ref.sort_mo([4, 5, 6, 10], base=1)
             ref.kernel(mo_ref)
             newton = mcscf.CASSCF(mf, 4, 4).state_average_([.25] * 4).newton()
+            newton.verbose = 5
             newton.chkfile = str(checkpoints / 'sa4-newton-current.chk')
             mo_newton = newton.sort_mo([4, 5, 6, 10], base=1)
             newton.kernel(mo_newton)
