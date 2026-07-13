@@ -3,6 +3,7 @@ param(
     [Parameter(Mandatory)][string]$TestEnvName,
     [Parameter(Mandatory)][ValidatePattern("^\d+\.\d+$")][string]$PythonVersion,
     [Parameter(Mandatory)][string]$Experiment,
+    [string]$Profiles = "all",
     [Parameter(Mandatory)][ValidateRange(1, 1000)][int]$Repeats,
     [string]$RuntimeDllDir = "",
     [switch]$Paired
@@ -57,6 +58,7 @@ try {
         conda run --no-capture-output -n $TestEnvName python $PairedRunner `
             --script $Script `
             --experiment $Experiment `
+            --profiles $Profiles `
             --repeats $Repeats `
             --output $OutputDir
     } else {

@@ -29,7 +29,17 @@ on:
           - split-analyze
           - split-pbc-hse03
           - split-sgx-pbe0
+          - split-sgx-hse06
           - split-sgx-wb97x
+      profiles:
+        description: Split profiles to run
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - omp1-blas1,omp4-blas1
+          - omp1-blas4,omp4-blas4
       repeats:
         description: Maximum outer repetitions per diagnostic family
         required: true
@@ -72,6 +82,7 @@ jobs:
           python .github/workflows/run_paired_precision_diagnostics.py \
             --script .github/workflows/precision_experiments.py \
             --experiment "${{ inputs.experiment }}" \
+            --profiles "${{ inputs.profiles }}" \
             --repeats "${{ inputs.repeats }}" \
             --output "tmp/precision-thread-paired/${{ inputs.experiment }}"
       - name: Capture runtime environment
@@ -117,6 +128,7 @@ jobs:
           python .github/workflows/run_paired_precision_diagnostics.py \
             --script .github/workflows/precision_experiments.py \
             --experiment "${{ inputs.experiment }}" \
+            --profiles "${{ inputs.profiles }}" \
             --repeats "${{ inputs.repeats }}" \
             --output "tmp/precision-thread-paired/${{ inputs.experiment }}"
       - name: Capture runtime environment
@@ -174,6 +186,7 @@ jobs:
             -TestEnvName "pyscf-paired-test-$tag" `
             -PythonVersion "${{ matrix.python-version }}" `
             -Experiment "${{ inputs.experiment }}" `
+            -Profiles "${{ inputs.profiles }}" `
             -Repeats ([int]"${{ inputs.repeats }}") `
             -RuntimeDllDir $env:RUNTIME_DLL_DIR `
             -Paired

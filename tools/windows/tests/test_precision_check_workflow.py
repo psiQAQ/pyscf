@@ -219,6 +219,67 @@ keys = ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS', 'VECLIB_MA
             metadata = json.loads((root / 'out' / 'paired-runs.json').read_text())
             self.assertEqual([run['profile'] for run in metadata['runs']], list(expected))
 
+    def test_split_runner_selects_requested_profiles(self):
+        spec = importlib.util.spec_from_file_location('run_paired_precision_diagnostics', PAIRED_DIAGNOSTICS_RUNNER)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        experiment, profiles = module.execution_profiles(
+            'split-sgx-hse06', 'omp1-blas1,omp4-blas1')
+
+        self.assertEqual(experiment, 'sgx-hse06')
+        self.assertEqual([profile[0] for profile in profiles], ['omp1-blas1', 'omp4-blas1'])
+
+    def test_split_runner_rejects_invalid_profile_selection(self):
+        spec = importlib.util.spec_from_file_location('run_paired_precision_diagnostics', PAIRED_DIAGNOSTICS_RUNNER)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        cases = (
+            ('split-sgx-hse06', 'unknown'),
+            ('split-sgx-hse06', 'omp1-blas1,omp1-blas1'),
+            ('sgx-hse06', 'omp1-blas1'),
+        )
+        for experiment, profiles in cases:
+            with self.subTest(experiment=experiment, profiles=profiles):
+                with self.assertRaisesRegex(ValueError, 'profiles'):
+                    module.execution_profiles(experiment, profiles)
+
+    def test_split_runner_runs_only_requested_profiles(self):
+        spec = importlib.util.spec_from_file_location('run_paired_precision_diagnostics', PAIRED_DIAGNOSTICS_RUNNER)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        fake = '''
+import argparse, pathlib
+parser = argparse.ArgumentParser()
+parser.add_argument('--experiment')
+parser.add_argument('--repeats')
+parser.add_argument('--output')
+args = parser.parse_args()
+output = pathlib.Path(args.output)
+output.mkdir(parents=True, exist_ok=True)
+(output / 'experiment.txt').write_text(args.experiment)
+'''
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            script = root / 'fake.py'
+            script.write_text(fake, encoding='utf-8')
+            code = module.main((
+                '--python', sys.executable, '--script', str(script),
+                '--experiment', 'split-sgx-hse06', '--profiles', 'omp1-blas1,omp4-blas1',
+                '--repeats', '1', '--output', str(root / 'out'),
+            ))
+
+            self.assertEqual(code, 0)
+            self.assertEqual(
+                sorted(path.name for path in (root / 'out').iterdir() if path.is_dir()),
+                ['omp1-blas1', 'omp4-blas1'])
+            for profile in ('omp1-blas1', 'omp4-blas1'):
+                self.assertEqual((root / 'out' / profile / 'experiment.txt').read_text(), 'sgx-hse06')
+            metadata = json.loads((root / 'out' / 'paired-runs.json').read_text())
+            self.assertEqual(metadata['requested_profiles'], 'omp1-blas1,omp4-blas1')
+            self.assertEqual([run['profile'] for run in metadata['runs']], ['omp1-blas1', 'omp4-blas1'])
+
     def test_paired_workflow_builds_once_for_seven_platform_pairs(self):
         text = PAIRED_DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')
         self.assertFalse((WORKFLOW_DIR / 'ci-precision-thread-paired.yml').exists())
@@ -238,6 +299,18 @@ keys = ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS', 'VECLIB_MA
                            'split-sgx-pbe0', 'split-sgx-wb97x'):
             self.assertIn(f'          - {experiment}', text)
         self.assertIn('${{ inputs.experiment }}/*/summary.md', text)
+
+    def test_paired_workflow_can_shard_split_profiles(self):
+        workflow = PAIRED_DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')
+        windows_runner = WINDOWS_DIAGNOSTICS_RUNNER.read_text(encoding='utf-8')
+
+        self.assertIn('          - split-sgx-hse06', workflow)
+        self.assertIn('          - omp1-blas1,omp4-blas1', workflow)
+        self.assertIn('          - omp1-blas4,omp4-blas4', workflow)
+        self.assertEqual(workflow.count('--profiles "${{ inputs.profiles }}"'), 2)
+        self.assertEqual(workflow.count('-Profiles "${{ inputs.profiles }}"'), 1)
+        self.assertIn('[string]$Profiles = "all"', windows_runner)
+        self.assertIn('--profiles $Profiles', windows_runner)
 
     def test_check_workflow_replaces_old_precision_workflow(self):
         self.assertTrue(WORKFLOW.exists())

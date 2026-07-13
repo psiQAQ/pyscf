@@ -18,14 +18,23 @@ BLAS_VARIABLES = (
 THREAD_VARIABLES = ('OMP_NUM_THREADS',) + BLAS_VARIABLES
 
 
-def execution_profiles(experiment):
+def execution_profiles(experiment, requested_profiles='all'):
     if experiment.startswith('split-'):
-        return experiment[len('split-'):], (
+        profiles = (
             ('omp1-blas1', 1, 1),
             ('omp4-blas1', 4, 1),
             ('omp1-blas4', 1, 4),
             ('omp4-blas4', 4, 4),
         )
+        if requested_profiles != 'all':
+            by_name = {profile[0]: profile for profile in profiles}
+            names = requested_profiles.split(',')
+            if len(names) != len(set(names)) or any(name not in by_name for name in names):
+                raise ValueError(f'invalid profiles: {requested_profiles}')
+            profiles = tuple(by_name[name] for name in names)
+        return experiment[len('split-'):], profiles
+    if requested_profiles != 'all':
+        raise ValueError('profiles can only be selected for split experiments')
     return experiment, (('t1', 1, 1), ('t4', 4, 4))
 
 
@@ -34,6 +43,7 @@ def parse_args(argv=None):
     parser.add_argument('--python', default=sys.executable)
     parser.add_argument('--script', required=True)
     parser.add_argument('--experiment', required=True)
+    parser.add_argument('--profiles', default='all')
     parser.add_argument('--repeats', type=int, required=True)
     parser.add_argument('--output', type=Path, required=True)
     return parser.parse_args(argv)
@@ -42,10 +52,11 @@ def parse_args(argv=None):
 def main(argv=None):
     args = parse_args(argv)
     args.output.mkdir(parents=True, exist_ok=True)
-    experiment, profiles = execution_profiles(args.experiment)
+    experiment, profiles = execution_profiles(args.experiment, args.profiles)
     metadata = {
         'experiment': experiment,
         'requested_experiment': args.experiment,
+        'requested_profiles': args.profiles,
         'repeats': args.repeats,
         'python': args.python,
         'script': args.script,
