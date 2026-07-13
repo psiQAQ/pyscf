@@ -63,6 +63,7 @@ def main(argv=None):
         'runs': [],
     }
     metadata_path = args.output / 'paired-runs.json'
+    shared_fixture = None
     for profile, omp_threads, blas_threads in profiles:
         env = os.environ.copy()
         env['OMP_NUM_THREADS'] = str(omp_threads)
@@ -75,6 +76,8 @@ def main(argv=None):
             '--repeats', str(args.repeats),
             '--output', str(output),
         ]
+        if shared_fixture is not None:
+            command.extend(('--fixture', str(shared_fixture)))
         result = subprocess.run(command, env=env, check=False)
         metadata['runs'].append({
             'profile': profile,
@@ -89,6 +92,10 @@ def main(argv=None):
         metadata_path.write_text(json.dumps(metadata, indent=2), encoding='utf-8')
         if result.returncode:
             return result.returncode
+        if experiment == 'pbc-tdhf-replay' and shared_fixture is None:
+            shared_fixture = output / 'fixture.npz'
+            if not shared_fixture.is_file():
+                raise FileNotFoundError(f'replay fixture was not created: {shared_fixture}')
     return 0
 
 

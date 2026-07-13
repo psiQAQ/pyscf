@@ -36,6 +36,8 @@ NODEIDS = {
 
 
 def base_experiment(experiment):
+    if experiment == 'pbc-tdhf-replay':
+        return 'pbc-tdhf'
     return 'sgx' if experiment.startswith('sgx-') else experiment
 
 
@@ -464,6 +466,7 @@ SGX_SHARDS = {
     'sgx-wb97x': ('WB97X',),
 }
 CONTROL_EXPERIMENTS = ('sgx-hse06-control',)
+REPLAY_EXPERIMENTS = ('pbc-tdhf-replay',)
 
 
 def sgx_xcs(experiment):
@@ -761,6 +764,103 @@ def pbc_snapshot(mf, td, a, b):
     )
 
 
+def replay_pbc_tdhf_matrix(a, b, x0, hdiag, nroots=5, tol_residual=1e-8,
+                           max_cycle=100, verbose=0):
+    import numpy
+    from pyscf.lib import logger
+    from pyscf.tdscf._lr_eig import real_eig
+
+    matrix = numpy.block([[a, b], [-b.conj(), -a.conj()]])
+    def vind(vectors):
+        return numpy.asarray(vectors).dot(matrix.T)
+
+    def precond(vectors, energy, *args):
+        energy = energy[0] if isinstance(energy, numpy.ndarray) else energy
+        denominator = hdiag - energy
+        denominator[abs(denominator) < 1e-8] = 1e-8
+        return vectors / denominator
+
+    log = logger.new_logger(None, verbose) if isinstance(verbose, int) else verbose
+    converged, roots, vectors = real_eig(
+        vind, numpy.array(x0, copy=True), precond, tol_residual=tol_residual,
+        nroots=nroots, max_cycle=max_cycle, verbose=log)
+    eigenvalues = numpy.linalg.eigvals(matrix)
+    direct = numpy.sort(eigenvalues[(abs(eigenvalues.imag) < 1e-7) & (eigenvalues.real > 1e-3)].real)[:nroots]
+    residuals = [residual(vind, vector, root) for root, vector in zip(roots, vectors)]
+    return {
+        'converged': numpy.asarray(converged),
+        'iterative_roots': numpy.asarray(roots),
+        'direct_roots': direct,
+        'residuals': numpy.asarray(residuals),
+        'vectors': numpy.asarray(vectors),
+    }
+
+
+def run_pbc_tdhf_replay(args, recorder):
+    import numpy
+    from pyscf.data.nist import HARTREE2EV
+    from pyscf.lib import logger
+
+    fixture = Path(args.fixture) if args.fixture is not None else recorder.output / 'fixture.npz'
+    if args.fixture is None:
+        create_pbc_tdhf_fixture(fixture)
+    fixture_path = fixture.resolve()
+    fixture_sha256 = hashlib.sha256(fixture_path.read_bytes()).hexdigest()
+    with numpy.load(fixture_path) as fixture:
+        arrays = {name: numpy.array(fixture[name], copy=True) for name in fixture.files}
+    nroots = int(arrays['nroots'])
+    for attempt in range(1, args.repeats + 1):
+        log_path = recorder.log_path('fixed-matrix', attempt)
+        start = time.monotonic()
+        try:
+            with log_path.open('w', encoding='utf-8') as output:
+                result = replay_pbc_tdhf_matrix(
+                    arrays['a'], arrays['b'], arrays['x0'], arrays['hdiag'],
+                    nroots=nroots, tol_residual=1e-8, max_cycle=100,
+                    verbose=logger.Logger(output, logger.DEBUG1))
+            reference_count = len(arrays['reference'])
+            reference_error = float(abs(
+                result['iterative_roots'][:reference_count] - arrays['reference']).max() * HARTREE2EV)
+            direct_count = min(4, len(result['direct_roots']), len(result['iterative_roots']))
+            direct_error = float(abs(
+                result['iterative_roots'][:direct_count] - result['direct_roots'][:direct_count]).max())
+            converged = bool(result['converged'].all())
+            if not converged:
+                status = 'not_converged'
+            elif reference_error >= 5e-5 or direct_error >= 5e-8:
+                status = 'reference_mismatch'
+            else:
+                status = 'pass'
+            signature = ('pbc-tdhf-replay-pass' if status == 'pass' else
+                         f'pbc-tdhf-replay-{status}-{error_bucket(max(reference_error, direct_error))}')
+            snapshot = dict(arrays)
+            snapshot.update(replay_roots=result['iterative_roots'], replay_vectors=result['vectors'])
+            recorder.record(attempt, 'fixed-matrix', status, time.monotonic() - start, {
+                'fixture_sha256': fixture_sha256,
+                'iterative_roots': result['iterative_roots'],
+                'direct_roots': result['direct_roots'],
+                'reference_error_ev': reference_error,
+                'direct_error_hartree': direct_error,
+                'td_converged': result['converged'],
+                'td_residuals': result['residuals'],
+                'a': array_metadata(arrays['a']),
+                'b': array_metadata(arrays['b']),
+                'x0': array_metadata(arrays['x0']),
+                'hdiag': array_metadata(arrays['hdiag']),
+                'failure_signature': signature if status != 'pass' else None,
+                'snapshot_file': recorder.save_snapshot_once(status, signature, snapshot),
+                'log_file': str(log_path),
+            })
+        except Exception:
+            recorder.record(attempt, 'fixed-matrix', 'exception', time.monotonic() - start, {
+                'fixture_sha256': fixture_sha256,
+                'log_file': str(log_path),
+                'traceback': traceback.format_exc(),
+            })
+        if experiment_complete(recorder):
+            break
+
+
 @contextlib.contextmanager
 def pbc_test_grid_settings():
     from pyscf.dft import radi
@@ -770,6 +870,46 @@ def pbc_test_grid_settings():
         yield
     finally:
         radi.ATOM_SPECIFIC_TREUTLER_GRIDS = original
+
+
+@pbc_test_grid_settings()
+def create_pbc_tdhf_fixture(path):
+    import numpy
+    from pyscf.data.nist import HARTREE2EV
+    from pyscf.pbc import scf
+
+    cell = None
+    try:
+        cell = build_diamond_cell(path.with_suffix('.log'), 'gth-hf-rev')
+        mf = scf.UKS(cell).set(xc='m06').rs_density_fit(auxbasis='weigend').run()
+        if not mf.converged:
+            raise RuntimeError('fixture SCF did not converge')
+        td = mf.TDDFT().set(nstates=5, conv_tol=1e-8)
+        a_blocks, b_blocks = td.get_ab()
+
+        def spin_block(blocks, symmetric):
+            aa, ab, bb = blocks
+            noa, nva, nob, nvb = ab.shape
+            aa = aa.reshape(noa * nva, noa * nva)
+            ab = ab.reshape(noa * nva, nob * nvb)
+            bb = bb.reshape(nob * nvb, nob * nvb)
+            lower = ab.T if symmetric else ab.conj().T
+            return numpy.block([[aa, ab], [lower, bb]])
+
+        _, hdiag = td.gen_vind(mf)
+        x0 = td.get_init_guess(mf, 5)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        numpy.savez_compressed(
+            path,
+            a=spin_block(a_blocks, False),
+            b=spin_block(b_blocks, True),
+            x0=x0,
+            hdiag=hdiag,
+            reference=numpy.asarray((9.09165361, 11.51362009)) / HARTREE2EV,
+            nroots=numpy.asarray(5),
+        )
+    finally:
+        close_mol(cell)
 
 
 @pbc_test_grid_settings()
@@ -1064,6 +1204,8 @@ def run_experiment(experiment, args, output):
     try:
         if experiment in CONTROL_EXPERIMENTS:
             run_sgx_hse06_control(args, recorder)
+        elif experiment in REPLAY_EXPERIMENTS:
+            run_pbc_tdhf_replay(args, recorder)
         elif experiment == 'sgx' or experiment in SGX_SHARDS:
             run_sgx(args, recorder, sgx_xcs(experiment))
         else:
@@ -1103,10 +1245,12 @@ def write_all_summary(output, recorders):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '--experiment', choices=('all',) + EXPERIMENTS + tuple(SGX_SHARDS) + CONTROL_EXPERIMENTS,
+        '--experiment', choices=(
+            ('all',) + EXPERIMENTS + tuple(SGX_SHARDS) + CONTROL_EXPERIMENTS + REPLAY_EXPERIMENTS),
         required=True)
     parser.add_argument('--repeats', type=int, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--fixture', type=Path)
     args = parser.parse_args()
     if args.repeats < 1:
         parser.error('--repeats must be positive')

@@ -28,6 +28,7 @@ on:
           - split-tddft
           - split-analyze
           - split-pbc-hse03
+          - split-pbc-tdhf-replay
           - split-sgx-pbe0
           - split-sgx-hse06
           - split-sgx-hse06-control

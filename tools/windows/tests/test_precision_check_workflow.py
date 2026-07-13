@@ -174,6 +174,106 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
                     'sgx-hse06-control', SimpleNamespace(repeats=1), pathlib.Path(tmp))
             runner.assert_called_once()
 
+    def test_pbc_tdhf_replay_is_dispatchable(self):
+        spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        workflow = DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')
+        self.assertIn('pbc-tdhf-replay', module.REPLAY_EXPERIMENTS)
+        self.assertIn('          - split-pbc-tdhf-replay', workflow)
+
+        paired_spec = importlib.util.spec_from_file_location(
+            'run_paired_precision_diagnostics', PAIRED_DIAGNOSTICS_RUNNER)
+        paired = importlib.util.module_from_spec(paired_spec)
+        paired_spec.loader.exec_module(paired)
+        experiment, profiles = paired.execution_profiles(
+            'split-pbc-tdhf-replay', 'omp1-blas1,omp4-blas4')
+        self.assertEqual(experiment, 'pbc-tdhf-replay')
+        self.assertEqual([item[0] for item in profiles], ['omp1-blas1', 'omp4-blas4'])
+
+    def test_pbc_tdhf_replay_dispatches_dedicated_runner(self):
+        from types import SimpleNamespace
+        from unittest import mock
+
+        spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        def record_once(args, recorder):
+            recorder.record(1, 'fixed-matrix', 'pass', 0.0, {})
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(
+                    module, 'run_pbc_tdhf_replay', side_effect=record_once, create=True) as runner:
+                module.run_experiment(
+                    'pbc-tdhf-replay', SimpleNamespace(repeats=1, fixture=None), pathlib.Path(tmp))
+            runner.assert_called_once()
+
+    def test_pbc_tdhf_fixed_matrix_replay_solves_known_root(self):
+        import numpy
+
+        spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        result = module.replay_pbc_tdhf_matrix(
+            numpy.asarray([[2.0]]), numpy.zeros((1, 1)),
+            numpy.asarray([[1.0, 0.0]]), numpy.asarray([2.0, -2.0]),
+            nroots=1, tol_residual=1e-10, max_cycle=10, verbose=0)
+        self.assertEqual(result['converged'].tolist(), [True])
+        numpy.testing.assert_allclose(result['iterative_roots'], [2.0], atol=1e-12)
+        numpy.testing.assert_allclose(result['direct_roots'], [2.0], atol=1e-12)
+        numpy.testing.assert_allclose(result['residuals'], [0.0], atol=1e-12)
+
+    def test_pbc_tdhf_replay_reads_fixture_and_records_each_attempt(self):
+        import numpy
+        from types import SimpleNamespace
+
+        spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            fixture = root / 'fixture.npz'
+            numpy.savez_compressed(
+                fixture, a=numpy.asarray([[2.0]]), b=numpy.zeros((1, 1)),
+                x0=numpy.asarray([[1.0, 0.0]]), hdiag=numpy.asarray([2.0, -2.0]),
+                reference=numpy.asarray([2.0]), nroots=numpy.asarray(1))
+            recorder = module.Recorder('pbc-tdhf-replay', root / 'output')
+            try:
+                module.run_pbc_tdhf_replay(SimpleNamespace(repeats=2, fixture=fixture), recorder)
+            finally:
+                recorder.finish()
+            self.assertEqual([record['status'] for record in recorder.records], ['pass', 'pass'])
+            self.assertEqual({record['nodeid'] for record in recorder.records}, {module.NODEIDS['pbc-tdhf']})
+            self.assertTrue(all(record['details']['fixture_sha256'] for record in recorder.records))
+
+    def test_pbc_tdhf_replay_creates_fixture_for_first_profile(self):
+        import numpy
+        from types import SimpleNamespace
+        from unittest import mock
+
+        spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        def create_fixture(path):
+            numpy.savez_compressed(
+                path, a=numpy.asarray([[2.0]]), b=numpy.zeros((1, 1)),
+                x0=numpy.asarray([[1.0, 0.0]]), hdiag=numpy.asarray([2.0, -2.0]),
+                reference=numpy.asarray([2.0]), nroots=numpy.asarray(1))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            recorder = module.Recorder('pbc-tdhf-replay', root / 'output')
+            try:
+                with mock.patch.object(
+                        module, 'create_pbc_tdhf_fixture', side_effect=create_fixture, create=True) as creator:
+                    module.run_pbc_tdhf_replay(SimpleNamespace(repeats=1, fixture=None), recorder)
+                creator.assert_called_once_with(recorder.output / 'fixture.npz')
+            finally:
+                recorder.finish()
+            self.assertEqual([record['status'] for record in recorder.records], ['pass'])
+
     def test_paired_runner_sets_thread_environment_and_separates_outputs(self):
         spec = importlib.util.spec_from_file_location('run_paired_precision_diagnostics', PAIRED_DIAGNOSTICS_RUNNER)
         module = importlib.util.module_from_spec(spec)
@@ -219,6 +319,41 @@ keys = ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS', 'VECLIB_MA
                 '--experiment', 'fake', '--repeats', '1', '--output', str(root / 'out'),
             ))
             self.assertEqual(code, 9)
+
+    def test_pbc_tdhf_replay_reuses_first_profile_fixture(self):
+        spec = importlib.util.spec_from_file_location('run_paired_precision_diagnostics', PAIRED_DIAGNOSTICS_RUNNER)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        fake = '''
+import argparse, pathlib
+parser = argparse.ArgumentParser()
+parser.add_argument('--experiment')
+parser.add_argument('--repeats')
+parser.add_argument('--output')
+parser.add_argument('--fixture')
+args = parser.parse_args()
+output = pathlib.Path(args.output)
+output.mkdir(parents=True, exist_ok=True)
+fixture = pathlib.Path(args.fixture) if args.fixture else output / 'fixture.npz'
+if not args.fixture:
+    fixture.write_bytes(b'fixture')
+(output / 'fixture-path.txt').write_text(str(fixture.resolve()), encoding='utf-8')
+'''
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            script = root / 'fake.py'
+            script.write_text(fake, encoding='utf-8')
+            output = root / 'out'
+            code = module.main((
+                '--python', sys.executable, '--script', str(script),
+                '--experiment', 'split-pbc-tdhf-replay',
+                '--profiles', 'omp1-blas1,omp4-blas4',
+                '--repeats', '1', '--output', str(output),
+            ))
+            self.assertEqual(code, 0)
+            first = (output / 'omp1-blas1' / 'fixture-path.txt').read_text(encoding='utf-8')
+            second = (output / 'omp4-blas4' / 'fixture-path.txt').read_text(encoding='utf-8')
+            self.assertEqual(second, first)
 
     def test_split_runner_separates_openmp_and_blas_threads(self):
         spec = importlib.util.spec_from_file_location('run_paired_precision_diagnostics', PAIRED_DIAGNOSTICS_RUNNER)
