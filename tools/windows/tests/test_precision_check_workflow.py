@@ -234,7 +234,8 @@ keys = ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS', 'VECLIB_MA
         self.assertIn('run_paired_precision_diagnostics.py', text)
         self.assertIn('-Paired', text)
         for experiment in ('split-eom', 'split-ucasscf', 'split-sa4-newton',
-                           'split-tddft', 'split-analyze', 'split-pbc-hse03'):
+                           'split-tddft', 'split-analyze', 'split-pbc-hse03',
+                           'split-sgx-pbe0', 'split-sgx-wb97x'):
             self.assertIn(f'          - {experiment}', text)
         self.assertIn('${{ inputs.experiment }}/*/summary.md', text)
 

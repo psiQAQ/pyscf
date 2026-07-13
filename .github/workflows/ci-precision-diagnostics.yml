@@ -28,6 +28,8 @@ on:
           - split-tddft
           - split-analyze
           - split-pbc-hse03
+          - split-sgx-pbe0
+          - split-sgx-wb97x
       repeats:
         description: Maximum outer repetitions per diagnostic family
         required: true
