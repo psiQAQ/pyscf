@@ -867,6 +867,14 @@ class KnownValues(unittest.TestCase):
         self.assertEqual(levecs[1][0], 3)
         self.assertEqual(levecs[2][0], 4)
 
+        right_evecs = numpy.eye(2)
+        left_evecs = right_evecs[::-1]
+        revals, revecs, levecs = eom_rccsd._sort_left_right_eigensystem(
+            myeom, [True, True], [1., 1.], right_evecs,
+            [True, True], [1., 1.], left_evecs)
+        self.assertAlmostEqual(numpy.dot(levecs[0], revecs[0]), 1.)
+        self.assertAlmostEqual(numpy.dot(levecs[1], revecs[1]), 1.)
+
 #    def test_ea_matvec3(self):
 #        numpy.random.seed(12)
 #        r1 = numpy.random.random((nv)) - .9
