@@ -47,6 +47,15 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         self.assertIn('${#revision}', script)
         self.assertIn('libxc-$revision.tar.gz', script)
 
+    def test_linux_diagnostics_can_replace_only_generated_wpbeh_source(self):
+        workflow = DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')
+        script = LINUX_BUILD_SCRIPT.read_text(encoding='utf-8')
+        self.assertIn('      libxc_wpbeh_revision:', workflow)
+        self.assertIn('LIBXC_WPBEH_REVISION: ${{ inputs.libxc_wpbeh_revision }}', workflow)
+        self.assertIn('wpbeh_revision="${LIBXC_WPBEH_REVISION:-}"', script)
+        self.assertIn('/raw/$wpbeh_revision/src/maple2c/gga_exc/gga_x_wpbeh.c', script)
+        self.assertIn('libxc_url="file://$patched_archive"', script)
+
     def test_windows_build_environment_retries_transient_conda_failure(self):
         text = WINDOWS_BUILD_ENV_SCRIPT.read_text(encoding='utf-8')
         self.assertIn('for ($attempt = 1; $attempt -le 3; $attempt++)', text)

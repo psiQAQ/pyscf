@@ -64,6 +64,11 @@ on:
         required: true
         default: f4439479220beff707fc071e14345a205c885521
         type: string
+      libxc_wpbeh_revision:
+        description: Optional LibXC commit supplying only generated WPBEH C source
+        required: false
+        default: ""
+        type: string
 
 jobs:
   paired-linux:
@@ -82,6 +87,7 @@ jobs:
       - name: Install Linux dependencies
         env:
           LIBXC_REVISION: ${{ inputs.libxc_revision }}
+          LIBXC_WPBEH_REVISION: ${{ inputs.libxc_wpbeh_revision }}
         run: |
           .github/workflows/ci_linux/deps_apt.sh
           .github/workflows/ci_linux/python_deps.sh
