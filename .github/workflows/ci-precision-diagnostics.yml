@@ -30,6 +30,7 @@ on:
           - split-pbc-hse03
           - split-sgx-pbe0
           - split-sgx-hse06
+          - split-sgx-hse06-control
           - split-sgx-wb97x
       profiles:
         description: Split profiles to run

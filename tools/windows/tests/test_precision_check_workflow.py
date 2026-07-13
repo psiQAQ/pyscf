@@ -131,6 +131,40 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         for experiment in ('sgx-pbe0', 'sgx-hse06', 'sgx-wb97x'):
             self.assertIn(f'          - {experiment}', workflow)
 
+    def test_sgx_hse06_control_is_dispatchable(self):
+        spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        workflow = DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')
+        self.assertIn('sgx-hse06-control', module.CONTROL_EXPERIMENTS)
+        self.assertIn('          - split-sgx-hse06-control', workflow)
+
+        paired_spec = importlib.util.spec_from_file_location(
+            'run_paired_precision_diagnostics', PAIRED_DIAGNOSTICS_RUNNER)
+        paired = importlib.util.module_from_spec(paired_spec)
+        paired_spec.loader.exec_module(paired)
+        experiment, profiles = paired.execution_profiles(
+            'split-sgx-hse06-control', 'omp1-blas1,omp4-blas1')
+        self.assertEqual(experiment, 'sgx-hse06-control')
+        self.assertEqual([item[0] for item in profiles], ['omp1-blas1', 'omp4-blas1'])
+
+    def test_sgx_hse06_control_dispatches_dedicated_runner(self):
+        from types import SimpleNamespace
+        from unittest import mock
+
+        spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        def record_once(args, recorder):
+            recorder.record(1, 'rks', 'pass', 0.0, {})
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(module, 'run_sgx_hse06_control', side_effect=record_once) as runner:
+                module.run_experiment(
+                    'sgx-hse06-control', SimpleNamespace(repeats=1), pathlib.Path(tmp))
+            runner.assert_called_once()
+
     def test_paired_runner_sets_thread_environment_and_separates_outputs(self):
         spec = importlib.util.spec_from_file_location('run_paired_precision_diagnostics', PAIRED_DIAGNOSTICS_RUNNER)
         module = importlib.util.module_from_spec(spec)

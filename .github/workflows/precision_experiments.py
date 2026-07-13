@@ -463,10 +463,108 @@ SGX_SHARDS = {
     'sgx-hse06': ('HSE06',),
     'sgx-wb97x': ('WB97X',),
 }
+CONTROL_EXPERIMENTS = ('sgx-hse06-control',)
 
 
 def sgx_xcs(experiment):
     return SGX_SHARDS.get(experiment, SGX_XCS)
+
+
+def run_hse06_control_case(mol, backend, delta):
+    import numpy
+    from pyscf import dft, lib, scf
+    from pyscf.sgx.sgx import sgx_fit
+
+    mf = scf.RKS(mol).set(xc='HSE06')
+    gradient_options = {'grid_response': True}
+    if backend == 'sgx':
+        mf = sgx_fit(mf)
+        set_sgx_options(mf, (False, False, False, False, False))
+        gradient_options['sgx_grid_response'] = True
+    elif backend != 'rks':
+        raise ValueError(f'unsupported HSE06 control backend: {backend}')
+    mf.grids.level = 1
+    mf.conv_tol = 1e-12
+
+    gradient = mf.nuc_grad_method().set(**gradient_options).kernel()
+    converged = bool(mf.converged)
+    reference_energy = float(mf.e_tot)
+    density = numpy.array(mf.make_rdm1(), copy=True)
+    grid_coords = numpy.array(mf.grids.coords, copy=True)
+    grid_weights = numpy.array(mf.grids.weights, copy=True)
+
+    scanner = mf.as_scanner()
+    mol1 = mol.copy()
+    e_plus = scanner(mol1.set_geom_(
+        f'O 0 0 {delta:f}; H 0 -0.757 0.587; H 0 0.757 0.587'))
+    e_minus = scanner(mol1.set_geom_(
+        f'O 0 0 {-delta:f}; H 0 -0.757 0.587; H 0 0.757 0.587'))
+    force_sum = float(numpy.abs(gradient.sum(axis=0)).sum())
+    finite_difference = float((e_plus - e_minus) / (2 * delta) * lib.param.BOHR)
+    gradient_error = float(gradient[0, 2] - finite_difference)
+    force_ok = round(force_sum, 12) == 0
+    gradient_ok = round(gradient_error, 5) == 0
+    details = {
+        'backend': backend,
+        'scf_converged': converged,
+        'reference_energy': reference_energy,
+        'force_sum_l1': force_sum,
+        'analytic_gradient_z': float(gradient[0, 2]),
+        'finite_difference_z': finite_difference,
+        'gradient_error': gradient_error,
+        'force_assertion_pass': force_ok,
+        'finite_difference_assertion_pass': gradient_ok,
+        'libxc_version': dft.libxc.__version__,
+        'rsh_coeff': dft.libxc.rsh_coeff('HSE06'),
+        'gradient': array_metadata(gradient),
+        'density': array_metadata(density),
+        'grid_coords': array_metadata(grid_coords),
+        'grid_weights': array_metadata(grid_weights),
+    }
+    arrays = snapshot_arrays(
+        gradient=gradient, density=density,
+        grid_coords=grid_coords, grid_weights=grid_weights,
+        displaced_energies=(e_plus, e_minus),
+    )
+    return details, converged and force_ok and gradient_ok, arrays
+
+
+def run_sgx_hse06_control(args, recorder):
+    for attempt in range(1, args.repeats + 1):
+        delta = 1e-4
+        log_path = recorder.log_path('sgx-hse06-control', attempt)
+        mol = None
+        try:
+            mol = build_sgx_molecule(log_path)
+            for backend in ('rks', 'sgx'):
+                start = time.monotonic()
+                mode = f'{backend}:HSE06:delta-{delta:.0e}'
+                try:
+                    details, passed, arrays = run_hse06_control_case(mol, backend, delta)
+                    details.update({'delta': delta, 'log_file': str(log_path)})
+                    status = 'pass' if passed else 'reference_mismatch'
+                    if status == 'pass':
+                        signature = f'sgx-hse06-control-{backend}-pass'
+                    elif not details['force_assertion_pass']:
+                        signature = (f'sgx-hse06-control-{backend}-force-sum-'
+                                     f'{error_bucket(details["force_sum_l1"])}')
+                    else:
+                        signature = (f'sgx-hse06-control-{backend}-finite-difference-'
+                                     f'{error_bucket(details["gradient_error"])}')
+                    details['failure_signature'] = signature if status != 'pass' else None
+                    details['snapshot_file'] = recorder.save_snapshot_once(status, signature, arrays)
+                    recorder.record(attempt, mode, status, time.monotonic() - start, details)
+                except Exception:
+                    recorder.record(
+                        attempt, mode, 'exception', time.monotonic() - start,
+                        {'delta': delta, 'log_file': str(log_path), 'traceback': traceback.format_exc()})
+        except Exception:
+            recorder.record(attempt, 'setup', 'exception', 0.0,
+                            {'log_file': str(log_path), 'traceback': traceback.format_exc()})
+        finally:
+            close_mol(mol)
+        if experiment_complete(recorder):
+            break
 
 
 def run_sgx(args, recorder, xcs=SGX_XCS):
@@ -964,7 +1062,9 @@ EXPERIMENTS = (
 def run_experiment(experiment, args, output):
     recorder = Recorder(experiment, output)
     try:
-        if experiment == 'sgx' or experiment in SGX_SHARDS:
+        if experiment in CONTROL_EXPERIMENTS:
+            run_sgx_hse06_control(args, recorder)
+        elif experiment == 'sgx' or experiment in SGX_SHARDS:
             run_sgx(args, recorder, sgx_xcs(experiment))
         else:
             {
@@ -1002,7 +1102,9 @@ def write_all_summary(output, recorders):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--experiment', choices=('all',) + EXPERIMENTS + tuple(SGX_SHARDS), required=True)
+    parser.add_argument(
+        '--experiment', choices=('all',) + EXPERIMENTS + tuple(SGX_SHARDS) + CONTROL_EXPERIMENTS,
+        required=True)
     parser.add_argument('--repeats', type=int, required=True)
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
