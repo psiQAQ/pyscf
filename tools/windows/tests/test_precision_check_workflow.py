@@ -278,6 +278,36 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
             self.assertEqual({record['nodeid'] for record in recorder.records}, {module.NODEIDS['pbc-tdhf']})
             self.assertTrue(all(record['details']['fixture_sha256'] for record in recorder.records))
 
+    def test_pbc_tdhf_replay_uses_original_root_assertions(self):
+        import numpy
+        from types import SimpleNamespace
+        from unittest import mock
+
+        spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        result = {
+            'converged': numpy.asarray([True, False]),
+            'iterative_roots': numpy.asarray([2.0, 3.0]),
+            'direct_roots': numpy.asarray([2.0, 3.0]),
+            'residuals': numpy.asarray([0.0, 1e-7]),
+            'vectors': numpy.zeros((2, 4)),
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            fixture = root / 'fixture.npz'
+            numpy.savez_compressed(
+                fixture, a=numpy.eye(2), b=numpy.zeros((2, 2)), x0=numpy.eye(2, 4),
+                hdiag=numpy.asarray([2.0, 3.0, -2.0, -3.0]), reference=numpy.asarray([2.0]),
+                nroots=numpy.asarray(2))
+            recorder = module.Recorder('pbc-tdhf-replay', root / 'output')
+            try:
+                with mock.patch.object(module, 'replay_pbc_tdhf_matrix', return_value=result):
+                    module.run_pbc_tdhf_replay(SimpleNamespace(repeats=1, fixture=fixture), recorder)
+            finally:
+                recorder.finish()
+            self.assertEqual(recorder.records[0]['status'], 'pass')
+
     def test_pbc_tdhf_replay_creates_fixture_for_first_profile(self):
         import numpy
         from types import SimpleNamespace

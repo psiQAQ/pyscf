@@ -837,12 +837,13 @@ def run_pbc_tdhf_replay(args, recorder):
             direct_error = float(abs(
                 result['iterative_roots'][:direct_count] - result['direct_roots'][:direct_count]).max())
             converged = bool(result['converged'].all())
-            if not converged:
-                status = 'not_converged'
-            elif reference_error >= 5e-5 or direct_error >= 5e-8:
-                status = 'reference_mismatch'
-            else:
+            passed = reference_error < 5e-5 and direct_error < 5e-8
+            if passed:
                 status = 'pass'
+            elif not converged:
+                status = 'not_converged'
+            else:
+                status = 'reference_mismatch'
             signature = ('pbc-tdhf-replay-pass' if status == 'pass' else
                          f'pbc-tdhf-replay-{status}-{error_bucket(max(reference_error, direct_error))}')
             snapshot = dict(arrays)
