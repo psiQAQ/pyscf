@@ -56,6 +56,11 @@ on:
           - ubuntu
           - macos
           - windows
+      libxc_revision:
+        description: LibXC commit for Ubuntu diagnostics
+        required: true
+        default: f4439479220beff707fc071e14345a205c885521
+        type: string
 
 jobs:
   paired-linux:
@@ -72,6 +77,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install Linux dependencies
+        env:
+          LIBXC_REVISION: ${{ inputs.libxc_revision }}
         run: |
           .github/workflows/ci_linux/deps_apt.sh
           .github/workflows/ci_linux/python_deps.sh

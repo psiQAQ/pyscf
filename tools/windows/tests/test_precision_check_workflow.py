@@ -38,6 +38,15 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         self.assertIn('URL ${LIBXC_URL}', cmake)
         self.assertIn('archive/7.0.0/libxc-7.0.0.tar.gz', cmake)
 
+    def test_linux_precision_build_accepts_explicit_libxc_revision(self):
+        workflow = DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')
+        script = LINUX_BUILD_SCRIPT.read_text(encoding='utf-8')
+        self.assertIn('      libxc_revision:', workflow)
+        self.assertIn('LIBXC_REVISION: ${{ inputs.libxc_revision }}', workflow)
+        self.assertIn('revision="${LIBXC_REVISION:-', script)
+        self.assertIn('${#revision}', script)
+        self.assertIn('libxc-$revision.tar.gz', script)
+
     def test_windows_build_environment_retries_transient_conda_failure(self):
         text = WINDOWS_BUILD_ENV_SCRIPT.read_text(encoding='utf-8')
         self.assertIn('for ($attempt = 1; $attempt -le 3; $attempt++)', text)
