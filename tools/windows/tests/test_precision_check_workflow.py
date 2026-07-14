@@ -650,6 +650,8 @@ output.mkdir(parents=True, exist_ok=True)
         self.assertIn('          - split-sgx-hse06', workflow)
         self.assertIn('          - omp1-blas1,omp4-blas1', workflow)
         self.assertIn('          - omp1-blas4,omp4-blas4', workflow)
+        for profile in ('omp1-blas1', 'omp4-blas1', 'omp1-blas4', 'omp4-blas4'):
+            self.assertIn(f'          - {profile}\n', workflow)
         self.assertEqual(workflow.count('--profiles "${{ inputs.profiles }}"'), 2)
         self.assertEqual(workflow.count('-Profiles "${{ inputs.profiles }}"'), 1)
         self.assertIn('[string]$Profiles = "all"', windows_runner)
