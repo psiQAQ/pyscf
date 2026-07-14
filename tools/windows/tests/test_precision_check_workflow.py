@@ -128,6 +128,21 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         self.assertEqual(module.pbc_tda_status(1e-11, 5e-4), 'pass')
         self.assertEqual(module.pbc_tda_status(1e-3, 5e-4), 'reference_mismatch')
 
+    def test_tddft_status_matches_original_numeric_assertions(self):
+        spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.assertEqual(module.tddft_status(1e-11, 7.69383202636), 'pass')
+        self.assertEqual(module.tddft_status(1e-3, 7.69383202636), 'reference_mismatch')
+        self.assertEqual(module.tddft_status(1e-11, 7.7), 'reference_mismatch')
+
+    def test_ucasscf_status_matches_original_energy_assertion(self):
+        spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.assertEqual(module.ucasscf_status(-75.7460662487894), 'pass')
+        self.assertEqual(module.ucasscf_status(-75.746), 'reference_mismatch')
+
     def test_eom_diagnostic_checks_every_original_assertion(self):
         spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
         module = importlib.util.module_from_spec(spec)

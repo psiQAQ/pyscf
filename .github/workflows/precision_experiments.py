@@ -382,6 +382,10 @@ def run_ucasscf_once(log_path, checkpoint, mode, seed_mo=None, seed_ci=None):
         raise
 
 
+def ucasscf_status(energy):
+    return 'pass' if abs(energy - (-75.7460662487894)) < 5e-7 else 'reference_mismatch'
+
+
 def run_ucasscf(args, recorder):
     checkpoints = recorder.output / 'checkpoints'
     checkpoints.mkdir(exist_ok=True)
@@ -390,7 +394,6 @@ def run_ucasscf(args, recorder):
     seed_mo = numpy.loadtxt(guess_path).reshape(2, 13, 13)
     seed_ci = None
 
-    target = -75.7460662487894
     for attempt in range(1, args.repeats + 1):
         for mode in ('fixed',):
             log_path = recorder.log_path(f'ucasscf-{mode}', attempt)
@@ -400,9 +403,7 @@ def run_ucasscf(args, recorder):
                 mol, mc, details = run_ucasscf_once(
                     log_path, checkpoints / f'{mode}-current.chk', mode, seed_mo, seed_ci)
                 details['log_file'] = str(log_path)
-                matched = abs(mc.e_tot - target) < 5e-7
-                status = ('pass' if matched and mc.converged else
-                          ('not_converged' if not mc.converged else 'reference_mismatch'))
+                status = ucasscf_status(mc.e_tot)
                 signature = (f'ucasscf-{mode}-pass' if status == 'pass' else
                              f'ucasscf-{mode}-{status}-energy-{mc.e_tot:.5f}')
                 details['failure_signature'] = signature if status != 'pass' else None
@@ -687,6 +688,12 @@ def td_residuals(td):
     return residuals
 
 
+def tddft_status(max_direct_difference, fingerprint_ev):
+    if max_direct_difference < 5e-6 and abs(fingerprint_ev - 7.69383202636) < 5e-5:
+        return 'pass'
+    return 'reference_mismatch'
+
+
 def run_tddft(args, recorder):
     import numpy
     from pyscf import dft, gto, lib
@@ -714,9 +721,8 @@ def run_tddft(args, recorder):
             max_difference = float(abs(energies[:3] - direct_roots[:3]).max())
             fp = float(lib.fp(energies[:3] * 27.2114))
             converged = td.converged
-            matched = max_difference < 5e-6 and abs(fp - 7.69383202636) < 5e-5
             converged = all_true(converged)
-            status = 'pass' if matched and converged else ('not_converged' if not converged else 'reference_mismatch')
+            status = tddft_status(max_difference, fp)
             signature = ('tddft-pass' if status == 'pass' else
                          f'tddft-{status}-fingerprint-{error_bucket(fp - 7.69383202636)}')
             arrays = snapshot_arrays(
