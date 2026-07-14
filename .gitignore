@@ -87,6 +87,7 @@ OneRDM*
 
 # Memoization and caching
 tmp/
+/docs/
 
 # Local-only Windows packaging planning notes
 tools/windows/*.local.md
