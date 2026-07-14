@@ -47,6 +47,17 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         self.assertIn('${#revision}', script)
         self.assertIn('libxc-$revision.tar.gz', script)
 
+    def test_all_diagnostics_builds_accept_explicit_libxc_revision(self):
+        workflow = DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')
+        macos_script = MACOS_BUILD_SCRIPT.read_text(encoding='utf-8')
+        windows_script = WINDOWS_BUILD_SCRIPT.read_text(encoding='utf-8')
+
+        self.assertEqual(workflow.count('LIBXC_REVISION: ${{ inputs.libxc_revision }}'), 3)
+        self.assertIn('revision="${LIBXC_REVISION:-', macos_script)
+        self.assertIn('libxc-$revision.tar.gz', macos_script)
+        self.assertIn('$libxcRevision = if ($env:LIBXC_REVISION)', windows_script)
+        self.assertIn('libxc-$libxcRevision.tar.gz', windows_script)
+
     def test_linux_diagnostics_can_replace_only_generated_wpbeh_source(self):
         workflow = DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')
         script = LINUX_BUILD_SCRIPT.read_text(encoding='utf-8')
@@ -627,7 +638,7 @@ output.mkdir(parents=True, exist_ok=True)
         self.assertIn('run_paired_precision_diagnostics.py', text)
         self.assertIn('-Paired', text)
         for experiment in ('split-eom', 'split-ucasscf', 'split-sa4-newton',
-                           'split-tddft', 'split-analyze', 'split-pbc-hse03',
+                           'split-tddft', 'split-analyze', 'split-pbc-hse03', 'split-pbc-hse06',
                            'split-sgx-pbe0', 'split-sgx-wb97x'):
             self.assertIn(f'          - {experiment}', text)
         self.assertIn('${{ inputs.experiment }}/*/summary.md', text)

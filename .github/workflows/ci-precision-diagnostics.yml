@@ -28,6 +28,7 @@ on:
           - split-tddft
           - split-analyze
           - split-pbc-hse03
+          - split-pbc-hse06
           - split-pbc-tdhf-replay
           - split-pbc-tdhf-fixture-bank
           - split-pbc-tdhf-native-replay
@@ -60,7 +61,7 @@ on:
           - macos
           - windows
       libxc_revision:
-        description: LibXC commit for Ubuntu diagnostics
+        description: LibXC commit for diagnostics
         required: true
         default: f4439479220beff707fc071e14345a205c885521
         type: string
@@ -135,6 +136,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install macOS dependencies
+        env:
+          LIBXC_REVISION: ${{ inputs.libxc_revision }}
         run: |
           .github/workflows/ci_macos/deps_apt.sh
           .github/workflows/ci_macos/python_deps.sh
@@ -195,6 +198,7 @@ jobs:
             mingw-w64-ucrt-x86_64-openblas
       - name: Build installed wheel and run paired diagnostics
         env:
+          LIBXC_REVISION: ${{ inputs.libxc_revision }}
           RUNTIME_DLL_DIR: ${{ steps.msys2.outputs.msys2-location }}\ucrt64\bin
         run: |
           $tag = "${{ matrix.python-version }}".Replace(".", "")
