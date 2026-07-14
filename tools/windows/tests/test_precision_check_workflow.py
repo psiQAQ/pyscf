@@ -128,6 +128,32 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         self.assertEqual(module.pbc_tda_status(1e-11, 5e-4), 'pass')
         self.assertEqual(module.pbc_tda_status(1e-3, 5e-4), 'reference_mismatch')
 
+    def test_eom_diagnostic_checks_every_original_assertion(self):
+        spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        refs = module.EOM_ASSERTIONS['ip']
+        errors = module.eom_assertion_errors(
+            'ip', refs['single'], refs['right'], refs['left'], refs['star'])
+        self.assertEqual(max(errors.values()), 0)
+        bad_right = list(refs['right'])
+        bad_right[1] += 1e-3
+        errors = module.eom_assertion_errors(
+            'ip', refs['single'], bad_right, refs['left'], refs['star'])
+        self.assertGreater(errors['right'], 5e-6)
+
+    def test_analyze_diagnostic_checks_original_logger_values(self):
+        import numpy
+
+        spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        reference = module.ANALYZE_REFERENCE
+        self.assertEqual(module.analyze_output_error(reference), 0)
+        changed = numpy.asarray(reference).copy()
+        changed[-1] += 1e-2
+        self.assertGreater(module.analyze_output_error(changed), 5e-5)
+
     def test_sgx_formal_shards_select_one_xc(self):
         spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
         module = importlib.util.module_from_spec(spec)

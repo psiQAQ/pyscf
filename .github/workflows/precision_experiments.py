@@ -16,10 +16,26 @@ from collections import Counter
 from pathlib import Path
 
 
-EOM_REFERENCE = {
-    'ip': (0.4358615224789573, 0.4358615224789594),
-    'ea': (0.1894169322207168, 0.1894169322207168, 0.2820757599337823),
+EOM_ASSERTIONS = {
+    'ip': {
+        'single': .42789089871467728,
+        'right': (.42789089871467728, .42789089871467728, .50226873136932748),
+        'left': (.4278908208680458, .4278908208680482, .5022686041399118),
+        'star': (.4358615224789573, .4358615224789594),
+    },
+    'ea': {
+        'single': .19050592141957523,
+        'right': (.19050592141957523, .19050592141957523, .28345228596676159),
+        'left': (.1905059282334537, .1905059282334538, .2834522921515028),
+        'star': (.1894169322207168, .1894169322207168, .2820757599337823),
+    },
 }
+
+ANALYZE_REFERENCE = (
+    1, 2.057393297642004, 602.62734, .1605980834206071,
+    2, 2.2806597448158272, 543.63317, .0016221163442707552,
+    3, 6.372445278065303, 194.56302, 0,
+)
 
 NODEIDS = {
     'eom:ip': 'pyscf/cc/test/test_eom_gccsd.py::KnownValues::test_ipccsd',
@@ -128,6 +144,23 @@ def error_bucket(value):
     return 'zero' if value == 0 else f'1e{math.floor(math.log10(value)):+d}'
 
 
+def eom_assertion_errors(kind, single, right, left, star):
+    refs = EOM_ASSERTIONS[kind]
+    return {
+        'single': abs(float(single) - refs['single']),
+        'right': max(abs(float(value) - reference) for value, reference in zip(right, refs['right'])),
+        'left': max(abs(float(value) - reference) for value, reference in zip(left, refs['left'])),
+        'star': max(abs(float(value) - reference) for value, reference in zip(star, refs['star'])),
+    }
+
+
+def analyze_output_error(values):
+    import numpy
+    nested = isinstance(values, (tuple, list)) and values and isinstance(values[0], (tuple, list))
+    actual = numpy.hstack(values) if nested else numpy.asarray(values)
+    return float(abs(actual - ANALYZE_REFERENCE).max())
+
+
 class Recorder:
     def __init__(self, experiment, output):
         self.experiment = experiment
@@ -232,19 +265,22 @@ def run_eom_kind(mycc, kind):
     import numpy
     from pyscf.cc import eom_gccsd, eom_rccsd
     eom = eom_gccsd.EOMIP(mycc) if kind == 'ip' else eom_gccsd.EOMEA(mycc)
+    single_solve = mycc.ipccsd if kind == 'ip' else mycc.eaccsd
     solve = eom.ipccsd if kind == 'ip' else eom.eaccsd
-    star = eom.ipccsd_star_contract if kind == 'ip' else eom.eaccsd_star_contract
+    star_solve = eom.ipccsd_star if kind == 'ip' else eom.eaccsd_star
+    single_e, _ = single_solve(nroots=1)
     right_e, right_v = solve(nroots=3)
     right_converged = copy.deepcopy(eom.converged)
-    left_e, left_v = solve(nroots=3, left=True, guess=right_v)
+    left_e, left_v = solve(nroots=3, left=True)
     left_converged = copy.deepcopy(eom.converged)
-    star_input_e, star_right_v, star_left_v = eom_rccsd._sort_left_right_eigensystem(
+    _, star_right_v, star_left_v = eom_rccsd._sort_left_right_eigensystem(
         eom, right_converged, right_e, right_v, left_converged, left_e, left_v)
-    star_e = star(star_input_e, star_right_v, star_left_v)
+    star_e = star_solve(nroots=3, right_guess=right_v)
     right_matvec, _ = eom.gen_matvec()
     left_matvec, _ = eom.gen_matvec(left=True)
     overlaps = [[numpy.dot(left, right) for right in right_v] for left in left_v]
     details = {
+        'single_eigenvalue': single_e,
         'right_eigenvalues': right_e,
         'left_eigenvalues': left_e,
         'star_eigenvalues': star_e,
@@ -259,17 +295,15 @@ def run_eom_kind(mycc, kind):
         't1': array_metadata(mycc.t1),
         't2': array_metadata(mycc.t2),
     }
-    target = EOM_REFERENCE[kind]
-    errors = [abs(star_e[index] - reference) for index, reference in enumerate(target)]
+    errors = eom_assertion_errors(kind, single_e, right_e, left_e, star_e)
     details['reference_errors'] = errors
-    matched = all(error < 5e-6 for error in errors)
-    converged = all_true(right_converged) and all_true(left_converged)
-    status = 'pass' if matched and converged else ('not_converged' if not converged else 'reference_mismatch')
-    worst_root = int(numpy.argmax(errors)) if errors else 0
+    matched = all(error < 5e-6 for error in errors.values())
+    status = 'pass' if matched else 'reference_mismatch'
+    worst_assertion = max(errors, key=errors.get)
     signature = (f'{kind}-pass' if status == 'pass' else
-                 f'{kind}-star-root-{worst_root}-{status}-{error_bucket(errors[worst_root])}')
+                 f'{kind}-{worst_assertion}-{status}-{error_bucket(errors[worst_assertion])}')
     arrays = snapshot_arrays(
-        right_e=right_e, left_e=left_e, star_e=star_e,
+        single_e=single_e, right_e=right_e, left_e=left_e, star_e=star_e,
         right_v=right_v, left_v=left_v, t1=mycc.t1, t2=mycc.t2,
     )
     return status, signature, details, arrays
@@ -1281,17 +1315,24 @@ def run_analyze(args, recorder):
             td = tdscf.TDHF(mf).set(verbose=5).run(conv_tol=1e-6)
             length = td.oscillator_strength(gauge='length')
             velocity = td.oscillator_strength(gauge='velocity', order=2)
+            note_args = []
+            def capture_note(rec, msg, *values):
+                note_args.append(values)
+            with lib.temporary_env(lib.logger.Logger, note=capture_note):
+                td.analyze()
             length_error = float(abs(lib.fp(length) - length_reference))
             velocity_error = float(abs(lib.fp(velocity) - velocity_reference))
-            converged = all_true(td.converged) and mf.converged
-            passed = converged and length_error < 5e-6 and velocity_error < 5e-6
-            status = 'pass' if passed else ('not_converged' if not converged else 'reference_mismatch')
+            analysis_error = analyze_output_error(note_args)
+            passed = length_error < 5e-6 and velocity_error < 5e-6 and analysis_error < 5e-5
+            status = 'pass' if passed else 'reference_mismatch'
             if status == 'pass':
                 signature = 'analyze-pass'
             elif length_error >= 5e-6:
                 signature = f'analyze-length-{error_bucket(length_error)}'
-            else:
+            elif velocity_error >= 5e-6:
                 signature = f'analyze-velocity-{error_bucket(velocity_error)}'
+            else:
+                signature = f'analyze-output-{error_bucket(analysis_error)}'
             arrays = snapshot_arrays(
                 density=mf.make_rdm1(), mo_coeff=mf.mo_coeff, mo_energy=mf.mo_energy,
                 td_e=td.e, xy=td.xy, length=length, velocity=velocity)
@@ -1304,6 +1345,8 @@ def run_analyze(args, recorder):
                 'velocity_order_2': array_metadata(velocity),
                 'length_error': length_error,
                 'velocity_error': velocity_error,
+                'analysis_output': json_value(numpy.hstack(note_args)),
+                'analysis_output_error': analysis_error,
                 'transition_dipole': json_value(optional_array_call(td, 'transition_dipole')),
                 'transition_velocity_dipole': json_value(optional_array_call(td, 'transition_velocity_dipole')),
                 'failure_signature': signature if status != 'pass' else None,
