@@ -9,6 +9,8 @@ import unittest
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
 WORKFLOW_DIR = REPO_ROOT / '.github' / 'workflows'
 WORKFLOW = WORKFLOW_DIR / 'ci-precision-check.yml'
+CORE_CI_WORKFLOW = WORKFLOW_DIR / 'ci.yml'
+LINT_WORKFLOW = WORKFLOW_DIR / 'lint.yml'
 UNIX_RUNNER = WORKFLOW_DIR / 'run_unix_precision_tests.sh'
 LINUX_BUILD_SCRIPT = WORKFLOW_DIR / 'ci_linux' / 'build_pyscf.sh'
 MACOS_BUILD_SCRIPT = WORKFLOW_DIR / 'ci_macos' / 'build_pyscf.sh'
@@ -24,6 +26,11 @@ PAIRED_DIAGNOSTICS_RUNNER = WORKFLOW_DIR / 'run_paired_precision_diagnostics.py'
 
 
 class PrecisionCheckWorkflowTests(unittest.TestCase):
+    def test_core_ci_and_lint_keep_automatic_triggers(self):
+        for workflow in (CORE_CI_WORKFLOW, LINT_WORKFLOW):
+            text = workflow.read_text(encoding='utf-8')
+            self.assertIn('on: [push, pull_request]', text)
+
     def test_linux_build_dependency_download_retries_to_file(self):
         text = LINUX_BUILD_SCRIPT.read_text(encoding='utf-8')
         self.assertIn('--retry-all-errors', text)
