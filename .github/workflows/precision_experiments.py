@@ -453,7 +453,7 @@ def set_sgx_options(mf, settings):
         mf.with_df.sgx_tol_potential = None
     mf.with_df._symm_ovlp_fit = symm_fit
     mf.grids.level = 1
-    mf.conv_tol = 1e-12
+    mf.conv_tol = 1e-13
 
 
 def run_sgx_case(mol, settings, order, xc, delta):

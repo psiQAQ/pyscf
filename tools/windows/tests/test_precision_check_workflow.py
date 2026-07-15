@@ -201,6 +201,16 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         for experiment in ('sgx-pbe0', 'sgx-hse06', 'sgx-wb97x'):
             self.assertIn(f'          - {experiment}', workflow)
 
+    def test_sgx_control_uses_tighter_energy_convergence(self):
+        from types import SimpleNamespace
+
+        spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        mf = SimpleNamespace(xc='HSE06', with_df=SimpleNamespace(), grids=SimpleNamespace())
+        module.set_sgx_options(mf, (False, False, False, False, False))
+        self.assertEqual(mf.conv_tol, 1e-13)
+
     def test_sgx_hse06_control_is_dispatchable(self):
         spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
         module = importlib.util.module_from_spec(spec)
