@@ -35,6 +35,7 @@ on:
           - split-sgx-pbe0
           - split-sgx-hse06
           - split-sgx-hse06-control
+          - split-sgx-hse06-settings2
           - split-sgx-wb97x
       profiles:
         description: Split profiles to run
