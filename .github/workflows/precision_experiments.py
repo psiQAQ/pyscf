@@ -504,9 +504,14 @@ SGX_SHARDS = {
     'sgx-pbe0': ('PBE0',),
     'sgx-hse06': ('HSE06',),
     'sgx-hse06-settings2': ('HSE06',),
+    'sgx-hse06-settings2-sequence': ('HSE06',),
     'sgx-wb97x': ('WB97X',),
 }
-SGX_SETTING_SHARDS = {'sgx-hse06-settings2': (2,)}
+SGX_SETTING_SHARDS = {
+    'sgx-hse06-settings2': (2,),
+    'sgx-hse06-settings2-sequence': (2,),
+}
+SGX_WARMUP_SHARDS = {'sgx-hse06-settings2-sequence': (0, 1)}
 CONTROL_EXPERIMENTS = ('sgx-hse06-control',)
 REPLAY_EXPERIMENTS = ('pbc-tdhf-replay', 'pbc-tdhf-fixture-bank')
 NATIVE_REPLAY_EXPERIMENTS = ('pbc-tdhf-native-replay',)
@@ -518,6 +523,10 @@ def sgx_xcs(experiment):
 
 def sgx_setting_indices(experiment):
     return SGX_SETTING_SHARDS.get(experiment, tuple(range(len(SGX_SETTINGS))))
+
+
+def sgx_warmup_setting_indices(experiment):
+    return SGX_WARMUP_SHARDS.get(experiment, ())
 
 
 def run_hse06_control_case(mol, backend, delta):
@@ -617,13 +626,17 @@ def run_sgx_hse06_control(args, recorder):
             break
 
 
-def run_sgx(args, recorder, xcs=SGX_XCS, setting_indices=(0, 1, 2)):
+def run_sgx(args, recorder, xcs=SGX_XCS, setting_indices=(0, 1, 2), warmup_setting_indices=()):
     for attempt in range(1, args.repeats + 1):
         delta = 1e-4
         log_path = recorder.log_path('sgx', attempt)
         mol = None
         try:
             mol = build_sgx_molecule(log_path)
+            for setting_index in warmup_setting_indices:
+                settings, order = SGX_SETTINGS[setting_index]
+                for xc in xcs:
+                    run_sgx_case(mol, settings, order, xc, delta)
             for setting_index in setting_indices:
                 settings, order = SGX_SETTINGS[setting_index]
                 for xc in xcs:
@@ -1390,7 +1403,8 @@ def run_experiment(experiment, args, output):
         elif experiment in REPLAY_EXPERIMENTS:
             run_pbc_tdhf_replay(args, recorder)
         elif experiment == 'sgx' or experiment in SGX_SHARDS:
-            run_sgx(args, recorder, sgx_xcs(experiment), sgx_setting_indices(experiment))
+            run_sgx(args, recorder, sgx_xcs(experiment), sgx_setting_indices(experiment),
+                    sgx_warmup_setting_indices(experiment))
         else:
             {
                 'eom': run_eom,
