@@ -37,10 +37,17 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         self.assertIn('--output "$archive"', text)
         self.assertIn('tar xzf "$archive"', text)
 
-    def test_precision_builds_use_fixed_libxc_stability_revision(self):
-        revision = 'f4439479220beff707fc071e14345a205c885521'
-        for script in (LINUX_BUILD_SCRIPT, MACOS_BUILD_SCRIPT, WINDOWS_BUILD_SCRIPT):
-            self.assertIn(revision, script.read_text(encoding='utf-8'))
+    def test_core_builds_keep_default_libxc_and_precision_can_override_it(self):
+        linux_script = LINUX_BUILD_SCRIPT.read_text(encoding='utf-8')
+        macos_script = MACOS_BUILD_SCRIPT.read_text(encoding='utf-8')
+        windows_script = WINDOWS_BUILD_SCRIPT.read_text(encoding='utf-8')
+
+        self.assertIn('revision="${LIBXC_REVISION:-}"', linux_script)
+        self.assertIn('cmake -DBUILD_LIBXC=OFF', linux_script)
+        self.assertIn('revision="${LIBXC_REVISION:-}"', macos_script)
+        self.assertIn('if [ -n "$revision" ]; then', macos_script)
+        self.assertIn('$libxcRevision = $env:LIBXC_REVISION', windows_script)
+        self.assertIn('if ($libxcRevision) {', windows_script)
         cmake = LIB_CMAKE.read_text(encoding='utf-8')
         self.assertIn('URL ${LIBXC_URL}', cmake)
         self.assertIn('archive/7.0.0/libxc-7.0.0.tar.gz', cmake)
@@ -50,7 +57,7 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         script = LINUX_BUILD_SCRIPT.read_text(encoding='utf-8')
         self.assertIn('      libxc_revision:', workflow)
         self.assertIn('LIBXC_REVISION: ${{ inputs.libxc_revision }}', workflow)
-        self.assertIn('revision="${LIBXC_REVISION:-', script)
+        self.assertIn('revision="${LIBXC_REVISION:-}"', script)
         self.assertIn('${#revision}', script)
         self.assertIn('libxc-$revision.tar.gz', script)
 
@@ -68,9 +75,9 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         windows_script = WINDOWS_BUILD_SCRIPT.read_text(encoding='utf-8')
 
         self.assertEqual(workflow.count('LIBXC_REVISION: ${{ inputs.libxc_revision }}'), 1)
-        self.assertIn('revision="${LIBXC_REVISION:-', macos_script)
+        self.assertIn('revision="${LIBXC_REVISION:-}"', macos_script)
         self.assertIn('libxc-$revision.tar.gz', macos_script)
-        self.assertIn('$libxcRevision = if ($env:LIBXC_REVISION)', windows_script)
+        self.assertIn('$libxcRevision = $env:LIBXC_REVISION', windows_script)
         self.assertIn('libxc-$libxcRevision.tar.gz', windows_script)
 
     def test_linux_diagnostics_can_replace_only_generated_wpbeh_source(self):

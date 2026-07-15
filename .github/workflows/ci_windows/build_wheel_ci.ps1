@@ -227,13 +227,17 @@ try {
     $env:CC = "gcc"
     $env:CXX = "g++"
     $env:CMAKE_BUILD_PARALLEL_LEVEL = "8"
-    $libxcRevision = if ($env:LIBXC_REVISION) { $env:LIBXC_REVISION } else { "f4439479220beff707fc071e14345a205c885521" }
-    if ($libxcRevision -cnotmatch '^[0-9a-f]{40}$') {
+    $libxcRevision = $env:LIBXC_REVISION
+    if ($libxcRevision -and $libxcRevision -cnotmatch '^[0-9a-f]{40}$') {
         throw "LIBXC_REVISION must be a 40-character lowercase commit hash"
     }
     # OpenBLAS is consumed through the MSYS2 import library on Windows; the .dll.a keeps CMake/Ninja
     # linking consistent with the runtime DLLs that are later copied into the wheel payload.
-    $env:CMAKE_CONFIGURE_ARGS = "-G Ninja -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DBLAS_LIBRARIES=$RuntimeDllDir\\..\\lib\\libopenblas.dll.a -DENABLE_XCFUN=ON -DBUILD_XCFUN=ON -DLIBXC_URL=https://gitlab.com/libxc/libxc/-/archive/$libxcRevision/libxc-$libxcRevision.tar.gz"
+    $cmakeConfigureArgs = "-G Ninja -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DBLAS_LIBRARIES=$RuntimeDllDir\\..\\lib\\libopenblas.dll.a -DENABLE_XCFUN=ON -DBUILD_XCFUN=ON"
+    if ($libxcRevision) {
+        $cmakeConfigureArgs += " -DLIBXC_URL=https://gitlab.com/libxc/libxc/-/archive/$libxcRevision/libxc-$libxcRevision.tar.gz"
+    }
+    $env:CMAKE_CONFIGURE_ARGS = $cmakeConfigureArgs
 
     Copy-RequiredDlls -RuntimeDllDir $RuntimeDllDir -LibDir $LibDir
     $missingSupportDlls = @(Copy-SupportDlls -DepsBinDir $DepsBinDir -LibDir $LibDir -AllowMissing)
