@@ -152,6 +152,9 @@ function Stage-TestDirectory {
     # Run tests from a staged copy so installed-wheel verification cannot import helpers or packages
     # from the source tree by accident, which is easier to trip over on Windows than on Linux/macOS.
     $stagedDirectory = Join-Path $stageRoot (Sanitize-Name $relative)
+    if (Test-Path -LiteralPath $stagedDirectory) {
+        Remove-Item -LiteralPath $stagedDirectory -Recurse -Force
+    }
     New-Item -ItemType Directory -Path $stagedDirectory -Force | Out-Null
     Copy-Item -Path (Join-Path $SourceDirectory '*') -Destination $stagedDirectory -Recurse -Force
     return [pscustomobject]@{
