@@ -247,10 +247,10 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         calls = []
         settings2_attempt = 0
 
-        def run_case(mol, settings, order, xc, delta):
+        def run_case(mol, settings, order, xc, delta, trace_cycles=()):
             nonlocal settings2_attempt
             setting_index = next(index for index, (item, _) in enumerate(module.SGX_SETTINGS) if item == settings)
-            calls.append(setting_index)
+            calls.append((setting_index, tuple(trace_cycles)))
             if setting_index == 2:
                 settings2_attempt += 1
             passed = setting_index != 2 or settings2_attempt == 1
@@ -268,7 +268,10 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
             finally:
                 recorder.finish()
 
-            self.assertEqual(calls, [0, 1, 2, 0, 1, 2])
+            self.assertEqual(calls, [
+                (0, ()), (1, ()), (2, tuple(range(6, 13))),
+                (0, ()), (1, ()), (2, tuple(range(6, 13))),
+            ])
             self.assertEqual([record['mode'] for record in recorder.records],
                              ['settings-2:HSE06:delta-1e-04'] * 2)
             self.assertEqual([record['status'] for record in recorder.records], ['pass', 'reference_mismatch'])
@@ -276,6 +279,36 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
 
         workflow = DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')
         self.assertIn('          - split-sgx-hse06-settings2-sequence', workflow)
+
+    def test_sgx_cycle_trace_captures_scf_boundaries(self):
+        import numpy
+
+        spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        envs = {
+            'cycle': 6,
+            'e_tot': -1.0,
+            'last_hf_e': -0.9,
+            'norm_gorb': 2e-8,
+            'norm_ddm': 3e-9,
+            'dm_last': numpy.eye(2),
+            'vhf': numpy.eye(2) * 2,
+            'fock_last': numpy.eye(2) * 3,
+            'fock': numpy.eye(2) * 4,
+            'dm': numpy.eye(2) * 5,
+        }
+
+        metadata, arrays = module.scf_cycle_trace('minus', envs)
+
+        self.assertEqual((metadata['phase'], metadata['cycle']), ('minus', 7))
+        self.assertAlmostEqual(metadata['delta_energy'], -0.1)
+        self.assertEqual(metadata['density_in']['shape'], (2, 2))
+        self.assertEqual(
+            sorted(arrays),
+            ['minus_cycle_007_density_in', 'minus_cycle_007_density_out',
+             'minus_cycle_007_fock_diis', 'minus_cycle_007_fock_raw',
+             'minus_cycle_007_veff'])
 
     def test_sgx_hse06_control_is_dispatchable(self):
         spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)

@@ -456,19 +456,60 @@ def set_sgx_options(mf, settings):
     mf.conv_tol = 1e-12
 
 
-def run_sgx_case(mol, settings, order, xc, delta):
+def scf_cycle_trace(phase, envs):
+    import numpy
+
+    cycle = envs['cycle'] + 1
+    values = {
+        'density_in': envs['dm_last'],
+        'veff': envs['vhf'],
+        'fock_diis': envs['fock_last'],
+        'fock_raw': envs['fock'],
+        'density_out': envs['dm'],
+    }
+    metadata = {
+        'phase': phase,
+        'cycle': cycle,
+        'energy': float(envs['e_tot']),
+        'delta_energy': float(envs['e_tot'] - envs['last_hf_e']),
+        'gradient_norm': float(envs['norm_gorb']),
+        'density_change_norm': float(envs['norm_ddm']),
+        **{name: array_metadata(value) for name, value in values.items()},
+    }
+    prefix = f'{phase}_cycle_{cycle:03d}'
+    arrays = {f'{prefix}_{name}': numpy.array(value, copy=True) for name, value in values.items()}
+    return metadata, arrays
+
+
+def run_sgx_case(mol, settings, order, xc, delta, trace_cycles=()):
     import numpy
     from pyscf import lib, scf
     from pyscf.sgx.sgx import sgx_fit
     mf = sgx_fit(scf.RKS(mol).set(xc=xc))
     set_sgx_options(mf, settings)
+    trace_cycles = frozenset(trace_cycles)
+    trace_phase = {'name': 'base'}
+    cycle_trace = []
+    trace_arrays = {}
+    if trace_cycles:
+        def callback(envs):
+            if envs['cycle'] + 1 in trace_cycles:
+                metadata, arrays = scf_cycle_trace(trace_phase['name'], envs)
+                cycle_trace.append(metadata)
+                trace_arrays.update(arrays)
+        mf.callback = callback
     gradient = mf.nuc_grad_method().set(sgx_grid_response=True, grid_response=True).kernel()
+    converged = {'base': bool(mf.converged)}
     scanner = mf.as_scanner()
     mol1 = mol.copy()
+    trace_phase['name'] = 'plus'
     e_plus = scanner(mol1.set_geom_(
         f'O 0 0 {delta:f}; H 0 -0.757 0.587; H 0 0.757 0.587'))
+    converged['plus'] = bool(scanner.converged)
+    trace_phase['name'] = 'minus'
     e_minus = scanner(mol1.set_geom_(
         f'O 0 0 {-delta:f}; H 0 -0.757 0.587; H 0 0.757 0.587'))
+    converged['minus'] = bool(scanner.converged)
     force_sum = float(numpy.abs(gradient.sum(axis=0)).sum())
     finite_difference = float((e_plus - e_minus) / (2 * delta) * lib.param.BOHR)
     gradient_error = float(gradient[0, 2] - finite_difference)
@@ -491,6 +532,10 @@ def run_sgx_case(mol, settings, order, xc, delta):
         grid_coords=mf.grids.coords, grid_weights=mf.grids.weights,
         displaced_energies=(e_plus, e_minus),
     )
+    if trace_cycles:
+        details['scf_converged'] = converged
+        details['scf_cycle_trace'] = cycle_trace
+        arrays.update(trace_arrays)
     return details, force_ok and gradient_ok, arrays
 
 
@@ -643,7 +688,10 @@ def run_sgx(args, recorder, xcs=SGX_XCS, setting_indices=(0, 1, 2), warmup_setti
                     start = time.monotonic()
                     mode = f'settings-{setting_index}:{xc}:delta-{delta:.0e}'
                     try:
-                        details, passed, arrays = run_sgx_case(mol, settings, order, xc, delta)
+                        trace_cycles = range(6, 13) if recorder.experiment == \
+                            'sgx-hse06-settings2-sequence' else ()
+                        details, passed, arrays = run_sgx_case(
+                            mol, settings, order, xc, delta, trace_cycles=trace_cycles)
                         details.update({
                             'settings': settings, 'order': order, 'xc': xc,
                             'delta': delta, 'log_file': str(log_path),
