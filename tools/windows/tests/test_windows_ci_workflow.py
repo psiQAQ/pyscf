@@ -53,7 +53,20 @@ class WindowsCIWorkflowTests(unittest.TestCase):
         text = WORKFLOW.read_text(encoding='utf-8')
         self.assertIn('actions/upload-artifact@v7', text)
         self.assertIn('windows-build-artifacts', text)
-        self.assertIn('tmp/precision-results', text)
+        self.assertIn('if: always()', text)
+        self.assertIn('tmp/precision-results/**', text)
+        self.assertIn('.github/workflows/ci_windows/build-logs/**', text)
+        self.assertIn('dist/*.whl', text)
+        self.assertIn('include-hidden-files: true', text)
+
+    def test_runner_records_source_revision_before_build(self):
+        text = RUN_CI_WINDOWS.read_text(encoding='utf-8')
+        revision = 'git -C $RepoRoot rev-parse HEAD'
+        self.assertIn(revision, text)
+        self.assertIn('source-revision.txt', text)
+        self.assertLess(text.index(revision), text.index('create_build_env.ps1'))
+        self.assertLess(
+            text.index('source-revision.txt'), text.index('create_build_env.ps1'))
 
 
 if __name__ == '__main__':

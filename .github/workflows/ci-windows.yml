@@ -64,4 +64,8 @@ jobs:
         with:
           name: windows-build-artifacts
           if-no-files-found: warn
-          path: tmp/precision-results
+          include-hidden-files: true
+          path: |
+            tmp/precision-results/**
+            .github/workflows/ci_windows/build-logs/**
+            dist/*.whl

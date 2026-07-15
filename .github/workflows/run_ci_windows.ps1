@@ -28,6 +28,11 @@ $BuildEnvironmentDir = Join-Path $ResultsDir "environment\build"
 Remove-Item -LiteralPath $ResultsDir -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Path $BuildEnvironmentDir -Force | Out-Null
 Copy-Item -LiteralPath $SelectedPytestNodeIdsFile -Destination (Join-Path $ResultsDir "selected-nodeids.txt") -Force
+$SourceRevision = git -C $RepoRoot rev-parse HEAD
+if ($LASTEXITCODE -ne 0 -or -not $SourceRevision) {
+    throw "Failed to resolve the source revision"
+}
+$SourceRevision.Trim() | Set-Content -LiteralPath (Join-Path $ResultsDir "source-revision.txt") -Encoding ascii
 
 & (Join-Path $WindowsWorkflowDir "create_build_env.ps1") -BuildEnvName $BuildEnvName
 $BuildArgs = @(
