@@ -65,7 +65,8 @@ def nodeid_for(experiment, mode):
 def nodeid_complete(records, nodeid):
     statuses = {
         record['status'] for record in records
-        if record['nodeid'] == nodeid and record['attempt'] > 0
+        if (record['nodeid'] == nodeid and record['attempt'] > 0
+            and record['status'] != 'exception')
     }
     return 'pass' in statuses and any(status != 'pass' for status in statuses)
 

@@ -201,6 +201,24 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         for experiment in ('sgx-pbe0', 'sgx-hse06', 'sgx-wb97x'):
             self.assertIn(f'          - {experiment}', workflow)
 
+    def test_nodeid_completion_ignores_process_exceptions(self):
+        spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        nodeid = module.NODEIDS['sgx']
+        records = [
+            {'nodeid': nodeid, 'attempt': 1, 'mode': 'settings-2', 'status': 'pass'},
+            {'nodeid': nodeid, 'attempt': 2, 'mode': 'setup', 'status': 'exception'},
+            {'nodeid': nodeid, 'attempt': 3, 'mode': 'settings-2', 'status': 'exception'},
+        ]
+
+        self.assertFalse(module.nodeid_complete(records, nodeid))
+        records.append({
+            'nodeid': nodeid, 'attempt': 4, 'mode': 'settings-2',
+            'status': 'reference_mismatch',
+        })
+        self.assertTrue(module.nodeid_complete(records, nodeid))
+
     def test_sgx_hse06_settings2_records_paired_snapshots(self):
         import numpy
         from types import SimpleNamespace
