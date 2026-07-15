@@ -69,13 +69,16 @@ on:
       libxc_revision:
         description: LibXC commit for diagnostics
         required: true
-        default: f4439479220beff707fc071e14345a205c885521
         type: string
       libxc_wpbeh_revision:
         description: Optional LibXC commit supplying only generated WPBEH C source
         required: false
         default: ""
         type: string
+
+env:
+  LIBXC_REVISION: ${{ inputs.libxc_revision }}
+  LIBXC_WPBEH_REVISION: ${{ inputs.libxc_wpbeh_revision }}
 
 jobs:
   paired-linux:
@@ -92,9 +95,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install Linux dependencies
-        env:
-          LIBXC_REVISION: ${{ inputs.libxc_revision }}
-          LIBXC_WPBEH_REVISION: ${{ inputs.libxc_wpbeh_revision }}
         run: |
           .github/workflows/ci_linux/deps_apt.sh
           .github/workflows/ci_linux/python_deps.sh
@@ -142,9 +142,11 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install macOS dependencies
-        env:
-          LIBXC_REVISION: ${{ inputs.libxc_revision }}
         run: |
+          if [ -n "${LIBXC_WPBEH_REVISION:-}" ]; then
+            echo "LIBXC_WPBEH_REVISION is only supported on Linux" >&2
+            exit 2
+          fi
           .github/workflows/ci_macos/deps_apt.sh
           .github/workflows/ci_macos/python_deps.sh
           .github/workflows/ci_macos/build_pyscf.sh
@@ -204,9 +206,11 @@ jobs:
             mingw-w64-ucrt-x86_64-openblas
       - name: Build installed wheel and run paired diagnostics
         env:
-          LIBXC_REVISION: ${{ inputs.libxc_revision }}
           RUNTIME_DLL_DIR: ${{ steps.msys2.outputs.msys2-location }}\ucrt64\bin
         run: |
+          if ($env:LIBXC_WPBEH_REVISION) {
+            throw "LIBXC_WPBEH_REVISION is only supported on Linux"
+          }
           $tag = "${{ matrix.python-version }}".Replace(".", "")
           .\.github\workflows\run_windows_precision_diagnostics.ps1 `
             -BuildEnvName "pyscf-paired-build-$tag" `

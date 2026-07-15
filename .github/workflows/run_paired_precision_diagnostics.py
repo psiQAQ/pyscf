@@ -60,6 +60,8 @@ def main(argv=None):
         'repeats': args.repeats,
         'python': args.python,
         'script': args.script,
+        'libxc_revision': os.environ.get('LIBXC_REVISION'),
+        'libxc_wpbeh_revision': os.environ.get('LIBXC_WPBEH_REVISION'),
         'runs': [],
     }
     metadata_path = args.output / 'paired-runs.json'

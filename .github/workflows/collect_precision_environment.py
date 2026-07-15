@@ -17,7 +17,8 @@ from pathlib import Path
 
 CI_KEYS = ('RUNNER_OS', 'RUNNER_ARCH', 'ImageOS', 'ImageVersion', 'OMP_NUM_THREADS',
            'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS', 'BLIS_NUM_THREADS',
-           'VECLIB_MAXIMUM_THREADS', 'NUMEXPR_NUM_THREADS', 'PYSCF_EXT_PATH')
+           'VECLIB_MAXIMUM_THREADS', 'NUMEXPR_NUM_THREADS', 'PYSCF_EXT_PATH',
+           'LIBXC_REVISION', 'LIBXC_WPBEH_REVISION')
 TOOL_COMMANDS = (('cmake', '--version'), ('cc', '--version'), ('c++', '--version'),
                  ('clang', '--version'), ('gcc', '--version'), ('make', '--version'),
                  ('ldd', '--version'), ('sw_vers',), ('sysctl', '-n', 'machdep.cpu.brand_string'))

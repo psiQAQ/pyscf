@@ -12,6 +12,10 @@ SPEC.loader.exec_module(COLLECTOR)
 
 
 class CollectPrecisionEnvironmentTests(unittest.TestCase):
+    def test_libxc_source_revisions_are_recorded(self):
+        self.assertIn('LIBXC_REVISION', COLLECTOR.CI_KEYS)
+        self.assertIn('LIBXC_WPBEH_REVISION', COLLECTOR.CI_KEYS)
+
     def test_namespace_package_has_no_native_library_directory(self):
         namespace_package = types.SimpleNamespace(__file__=None)
         self.assertEqual(COLLECTOR.native_libraries(namespace_package), [])

@@ -47,12 +47,20 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         self.assertIn('${#revision}', script)
         self.assertIn('libxc-$revision.tar.gz', script)
 
+    def test_diagnostics_require_explicit_libxc_revision(self):
+        workflow = DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')
+        revision_input = workflow.split('      libxc_revision:', 1)[1].split(
+            '      libxc_wpbeh_revision:', 1)[0]
+
+        self.assertIn('required: true', revision_input)
+        self.assertNotIn('default:', revision_input)
+
     def test_all_diagnostics_builds_accept_explicit_libxc_revision(self):
         workflow = DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')
         macos_script = MACOS_BUILD_SCRIPT.read_text(encoding='utf-8')
         windows_script = WINDOWS_BUILD_SCRIPT.read_text(encoding='utf-8')
 
-        self.assertEqual(workflow.count('LIBXC_REVISION: ${{ inputs.libxc_revision }}'), 3)
+        self.assertEqual(workflow.count('LIBXC_REVISION: ${{ inputs.libxc_revision }}'), 1)
         self.assertIn('revision="${LIBXC_REVISION:-', macos_script)
         self.assertIn('libxc-$revision.tar.gz', macos_script)
         self.assertIn('$libxcRevision = if ($env:LIBXC_REVISION)', windows_script)
@@ -66,6 +74,13 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         self.assertIn('wpbeh_revision="${LIBXC_WPBEH_REVISION:-}"', script)
         self.assertIn('/raw/$wpbeh_revision/src/maple2c/gga_exc/gga_x_wpbeh.c', script)
         self.assertIn('libxc_url="file://$patched_archive"', script)
+
+    def test_non_linux_diagnostics_reject_wpbeh_source_override(self):
+        workflow = DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')
+
+        self.assertIn('LIBXC_WPBEH_REVISION is only supported on Linux', workflow)
+        self.assertIn('if [ -n "${LIBXC_WPBEH_REVISION:-}" ]; then', workflow)
+        self.assertIn('if ($env:LIBXC_WPBEH_REVISION) {', workflow)
 
     def test_windows_build_environment_retries_transient_conda_failure(self):
         text = WINDOWS_BUILD_ENV_SCRIPT.read_text(encoding='utf-8')
@@ -533,6 +548,8 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
             self.assertEqual([record['status'] for record in recorder.records], ['pass'])
 
     def test_paired_runner_sets_thread_environment_and_separates_outputs(self):
+        from unittest import mock
+
         spec = importlib.util.spec_from_file_location('run_paired_precision_diagnostics', PAIRED_DIAGNOSTICS_RUNNER)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
@@ -552,16 +569,22 @@ keys = ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS', 'VECLIB_MA
             root = pathlib.Path(tmp)
             script = root / 'fake.py'
             script.write_text(fake, encoding='utf-8')
-            code = module.main((
-                '--python', sys.executable, '--script', str(script),
-                '--experiment', 'fake', '--repeats', '1', '--output', str(root / 'out'),
-            ))
+            with mock.patch.dict(module.os.environ, {
+                    'LIBXC_REVISION': 'a' * 40,
+                    'LIBXC_WPBEH_REVISION': 'b' * 40,
+            }):
+                code = module.main((
+                    '--python', sys.executable, '--script', str(script),
+                    '--experiment', 'fake', '--repeats', '1', '--output', str(root / 'out'),
+                ))
             self.assertEqual(code, 0)
             for threads in ('1', '4'):
                 observed = json.loads((root / 'out' / f't{threads}' / 'observed.json').read_text())
                 self.assertEqual(set(observed.values()), {threads})
             metadata = json.loads((root / 'out' / 'paired-runs.json').read_text())
             self.assertEqual([run['threads'] for run in metadata['runs']], [1, 4])
+            self.assertEqual(metadata['libxc_revision'], 'a' * 40)
+            self.assertEqual(metadata['libxc_wpbeh_revision'], 'b' * 40)
 
     def test_paired_runner_propagates_child_failure(self):
         spec = importlib.util.spec_from_file_location('run_paired_precision_diagnostics', PAIRED_DIAGNOSTICS_RUNNER)
