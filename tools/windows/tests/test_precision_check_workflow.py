@@ -235,6 +235,48 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         workflow = DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')
         self.assertIn('          - split-sgx-hse06-settings2', workflow)
 
+    def test_sgx_hse06_settings2_sequence_runs_warmups_before_recording(self):
+        import numpy
+        from types import SimpleNamespace
+        from unittest import mock
+
+        spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        experiment = 'sgx-hse06-settings2-sequence'
+        calls = []
+        settings2_attempt = 0
+
+        def run_case(mol, settings, order, xc, delta):
+            nonlocal settings2_attempt
+            setting_index = next(index for index, (item, _) in enumerate(module.SGX_SETTINGS) if item == settings)
+            calls.append(setting_index)
+            if setting_index == 2:
+                settings2_attempt += 1
+            passed = setting_index != 2 or settings2_attempt == 1
+            return ({'force_assertion_pass': True, 'gradient_error': 0.0 if passed else 7e-7},
+                    passed, {'gradient': numpy.asarray([setting_index])})
+
+        with tempfile.TemporaryDirectory() as tmp:
+            recorder = module.Recorder(experiment, pathlib.Path(tmp))
+            try:
+                with mock.patch.object(module, 'build_sgx_molecule', return_value=SimpleNamespace(stdout=None)), \
+                     mock.patch.object(module, 'run_sgx_case', side_effect=run_case):
+                    module.run_sgx(
+                        SimpleNamespace(repeats=2), recorder, module.sgx_xcs(experiment),
+                        module.sgx_setting_indices(experiment), module.sgx_warmup_setting_indices(experiment))
+            finally:
+                recorder.finish()
+
+            self.assertEqual(calls, [0, 1, 2, 0, 1, 2])
+            self.assertEqual([record['mode'] for record in recorder.records],
+                             ['settings-2:HSE06:delta-1e-04'] * 2)
+            self.assertEqual([record['status'] for record in recorder.records], ['pass', 'reference_mismatch'])
+            self.assertEqual(len(list((pathlib.Path(tmp) / 'snapshots').glob('*.npz'))), 2)
+
+        workflow = DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')
+        self.assertIn('          - split-sgx-hse06-settings2-sequence', workflow)
+
     def test_sgx_hse06_control_is_dispatchable(self):
         spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
         module = importlib.util.module_from_spec(spec)
