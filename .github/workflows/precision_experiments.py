@@ -495,11 +495,18 @@ def run_sgx_case(mol, settings, order, xc, delta):
 
 
 SGX_XCS = ('PBE0', 'HSE06', 'WB97X')
+SGX_SETTINGS = (
+    ((False, False, False, False, False), 5),
+    ((True, False, False, False, False), 6),
+    ((True, True, True, True, True), 6),
+)
 SGX_SHARDS = {
     'sgx-pbe0': ('PBE0',),
     'sgx-hse06': ('HSE06',),
+    'sgx-hse06-settings2': ('HSE06',),
     'sgx-wb97x': ('WB97X',),
 }
+SGX_SETTING_SHARDS = {'sgx-hse06-settings2': (2,)}
 CONTROL_EXPERIMENTS = ('sgx-hse06-control',)
 REPLAY_EXPERIMENTS = ('pbc-tdhf-replay', 'pbc-tdhf-fixture-bank')
 NATIVE_REPLAY_EXPERIMENTS = ('pbc-tdhf-native-replay',)
@@ -507,6 +514,10 @@ NATIVE_REPLAY_EXPERIMENTS = ('pbc-tdhf-native-replay',)
 
 def sgx_xcs(experiment):
     return SGX_SHARDS.get(experiment, SGX_XCS)
+
+
+def sgx_setting_indices(experiment):
+    return SGX_SETTING_SHARDS.get(experiment, tuple(range(len(SGX_SETTINGS))))
 
 
 def run_hse06_control_case(mol, backend, delta):
@@ -606,20 +617,15 @@ def run_sgx_hse06_control(args, recorder):
             break
 
 
-def run_sgx(args, recorder, xcs=SGX_XCS):
-    settings_list = (
-        (False, False, False, False, False),
-        (True, False, False, False, False),
-        (True, True, True, True, True),
-    )
-    precisions = (5, 6, 6)
+def run_sgx(args, recorder, xcs=SGX_XCS, setting_indices=(0, 1, 2)):
     for attempt in range(1, args.repeats + 1):
         delta = 1e-4
         log_path = recorder.log_path('sgx', attempt)
         mol = None
         try:
             mol = build_sgx_molecule(log_path)
-            for setting_index, (settings, order) in enumerate(zip(settings_list, precisions)):
+            for setting_index in setting_indices:
+                settings, order = SGX_SETTINGS[setting_index]
                 for xc in xcs:
                     start = time.monotonic()
                     mode = f'settings-{setting_index}:{xc}:delta-{delta:.0e}'
@@ -1384,7 +1390,7 @@ def run_experiment(experiment, args, output):
         elif experiment in REPLAY_EXPERIMENTS:
             run_pbc_tdhf_replay(args, recorder)
         elif experiment == 'sgx' or experiment in SGX_SHARDS:
-            run_sgx(args, recorder, sgx_xcs(experiment))
+            run_sgx(args, recorder, sgx_xcs(experiment), sgx_setting_indices(experiment))
         else:
             {
                 'eom': run_eom,

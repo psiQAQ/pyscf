@@ -201,6 +201,40 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         for experiment in ('sgx-pbe0', 'sgx-hse06', 'sgx-wb97x'):
             self.assertIn(f'          - {experiment}', workflow)
 
+    def test_sgx_hse06_settings2_records_paired_snapshots(self):
+        import numpy
+        from types import SimpleNamespace
+        from unittest import mock
+
+        spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        experiment = 'sgx-hse06-settings2'
+        results = (
+            ({'force_assertion_pass': True, 'gradient_error': 0.0}, True, {'gradient': numpy.zeros(1)}),
+            ({'force_assertion_pass': True, 'gradient_error': 7e-7}, False, {'gradient': numpy.ones(1)}),
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            recorder = module.Recorder(experiment, pathlib.Path(tmp))
+            try:
+                with mock.patch.object(module, 'build_sgx_molecule', return_value=SimpleNamespace(stdout=None)), \
+                     mock.patch.object(module, 'run_sgx_case', side_effect=results) as run_case:
+                    module.run_sgx(
+                        SimpleNamespace(repeats=2), recorder, module.sgx_xcs(experiment),
+                        module.sgx_setting_indices(experiment))
+            finally:
+                recorder.finish()
+
+            self.assertEqual([record['mode'] for record in recorder.records],
+                             ['settings-2:HSE06:delta-1e-04'] * 2)
+            self.assertEqual([record['status'] for record in recorder.records], ['pass', 'reference_mismatch'])
+            self.assertEqual(len(list((pathlib.Path(tmp) / 'snapshots').glob('*.npz'))), 2)
+            self.assertEqual(run_case.call_count, 2)
+
+        workflow = DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')
+        self.assertIn('          - split-sgx-hse06-settings2', workflow)
+
     def test_sgx_hse06_control_is_dispatchable(self):
         spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
         module = importlib.util.module_from_spec(spec)
