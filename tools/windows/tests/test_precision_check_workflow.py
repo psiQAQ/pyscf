@@ -310,6 +310,36 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         workflow = DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')
         self.assertIn('          - split-sgx-hse06-settings2-sequence', workflow)
 
+    def test_sgx_hse06_settings2_no_extra_cycle_disables_scanner_conv_check(self):
+        import numpy
+        from types import SimpleNamespace
+        from unittest import mock
+
+        spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        experiment = 'sgx-hse06-settings2-no-extra-cycle'
+        result = ({'force_assertion_pass': True, 'gradient_error': 0.0},
+                  True, {'gradient': numpy.zeros(1)})
+
+        with tempfile.TemporaryDirectory() as tmp:
+            recorder = module.Recorder(experiment, pathlib.Path(tmp))
+            try:
+                with mock.patch.object(module, 'build_sgx_molecule', return_value=SimpleNamespace(stdout=None)), \
+                     mock.patch.object(module, 'run_sgx_case', return_value=result) as run_case:
+                    module.run_sgx(
+                        SimpleNamespace(repeats=1), recorder, module.sgx_xcs(experiment),
+                        module.sgx_setting_indices(experiment),
+                        scanner_conv_check=module.sgx_scanner_conv_check(experiment))
+            finally:
+                recorder.finish()
+
+            self.assertEqual(run_case.call_args.kwargs, {'scanner_conv_check': False})
+            self.assertFalse(recorder.records[0]['details']['scanner_conv_check'])
+
+        workflow = DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')
+        self.assertIn('          - split-sgx-hse06-settings2-no-extra-cycle', workflow)
+
     def test_sgx_hse06_control_is_dispatchable(self):
         spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
         module = importlib.util.module_from_spec(spec)

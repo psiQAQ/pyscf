@@ -457,7 +457,7 @@ def set_sgx_options(mf, settings):
     mf.conv_tol = 1e-12
 
 
-def run_sgx_case(mol, settings, order, xc, delta):
+def run_sgx_case(mol, settings, order, xc, delta, scanner_conv_check=True):
     import numpy
     from pyscf import lib, scf
     from pyscf.sgx.sgx import sgx_fit
@@ -465,6 +465,7 @@ def run_sgx_case(mol, settings, order, xc, delta):
     set_sgx_options(mf, settings)
     gradient = mf.nuc_grad_method().set(sgx_grid_response=True, grid_response=True).kernel()
     scanner = mf.as_scanner()
+    scanner.conv_check = scanner_conv_check
     mol1 = mol.copy()
     e_plus = scanner(mol1.set_geom_(
         f'O 0 0 {delta:f}; H 0 -0.757 0.587; H 0 0.757 0.587'))
@@ -506,13 +507,16 @@ SGX_SHARDS = {
     'sgx-hse06': ('HSE06',),
     'sgx-hse06-settings2': ('HSE06',),
     'sgx-hse06-settings2-sequence': ('HSE06',),
+    'sgx-hse06-settings2-no-extra-cycle': ('HSE06',),
     'sgx-wb97x': ('WB97X',),
 }
 SGX_SETTING_SHARDS = {
     'sgx-hse06-settings2': (2,),
     'sgx-hse06-settings2-sequence': (2,),
+    'sgx-hse06-settings2-no-extra-cycle': (2,),
 }
 SGX_WARMUP_SHARDS = {'sgx-hse06-settings2-sequence': (0, 1)}
+SGX_NO_EXTRA_CYCLE_SHARDS = {'sgx-hse06-settings2-no-extra-cycle'}
 CONTROL_EXPERIMENTS = ('sgx-hse06-control',)
 REPLAY_EXPERIMENTS = ('pbc-tdhf-replay', 'pbc-tdhf-fixture-bank')
 NATIVE_REPLAY_EXPERIMENTS = ('pbc-tdhf-native-replay',)
@@ -528,6 +532,10 @@ def sgx_setting_indices(experiment):
 
 def sgx_warmup_setting_indices(experiment):
     return SGX_WARMUP_SHARDS.get(experiment, ())
+
+
+def sgx_scanner_conv_check(experiment):
+    return experiment not in SGX_NO_EXTRA_CYCLE_SHARDS
 
 
 def run_hse06_control_case(mol, backend, delta):
@@ -627,7 +635,9 @@ def run_sgx_hse06_control(args, recorder):
             break
 
 
-def run_sgx(args, recorder, xcs=SGX_XCS, setting_indices=(0, 1, 2), warmup_setting_indices=()):
+def run_sgx(args, recorder, xcs=SGX_XCS, setting_indices=(0, 1, 2), warmup_setting_indices=(),
+            scanner_conv_check=True):
+    case_options = {} if scanner_conv_check else {'scanner_conv_check': False}
     for attempt in range(1, args.repeats + 1):
         delta = 1e-4
         log_path = recorder.log_path('sgx', attempt)
@@ -637,17 +647,19 @@ def run_sgx(args, recorder, xcs=SGX_XCS, setting_indices=(0, 1, 2), warmup_setti
             for setting_index in warmup_setting_indices:
                 settings, order = SGX_SETTINGS[setting_index]
                 for xc in xcs:
-                    run_sgx_case(mol, settings, order, xc, delta)
+                    run_sgx_case(mol, settings, order, xc, delta, **case_options)
             for setting_index in setting_indices:
                 settings, order = SGX_SETTINGS[setting_index]
                 for xc in xcs:
                     start = time.monotonic()
                     mode = f'settings-{setting_index}:{xc}:delta-{delta:.0e}'
                     try:
-                        details, passed, arrays = run_sgx_case(mol, settings, order, xc, delta)
+                        details, passed, arrays = run_sgx_case(
+                            mol, settings, order, xc, delta, **case_options)
                         details.update({
                             'settings': settings, 'order': order, 'xc': xc,
                             'delta': delta, 'log_file': str(log_path),
+                            'scanner_conv_check': scanner_conv_check,
                         })
                         status = 'pass' if passed else 'reference_mismatch'
                         if status == 'pass':
@@ -1405,7 +1417,8 @@ def run_experiment(experiment, args, output):
             run_pbc_tdhf_replay(args, recorder)
         elif experiment == 'sgx' or experiment in SGX_SHARDS:
             run_sgx(args, recorder, sgx_xcs(experiment), sgx_setting_indices(experiment),
-                    sgx_warmup_setting_indices(experiment))
+                    sgx_warmup_setting_indices(experiment),
+                    scanner_conv_check=sgx_scanner_conv_check(experiment))
         else:
             {
                 'eom': run_eom,
