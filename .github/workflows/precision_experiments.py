@@ -264,21 +264,17 @@ def build_eom_system(log_path):
 
 def run_eom_kind(mycc, kind):
     import numpy
-    from pyscf.cc import eom_gccsd, eom_rccsd
+    from pyscf.cc import eom_gccsd
     eom = eom_gccsd.EOMIP(mycc) if kind == 'ip' else eom_gccsd.EOMEA(mycc)
     single_solve = mycc.ipccsd if kind == 'ip' else mycc.eaccsd
     solve = eom.ipccsd if kind == 'ip' else eom.eaccsd
+    star_solve = eom.ipccsd_star if kind == 'ip' else eom.eaccsd_star
     single_e, _ = single_solve(nroots=1)
     right_e, right_v = solve(nroots=3)
     right_converged = copy.deepcopy(eom.converged)
     left_e, left_v = solve(nroots=3, left=True)
     left_converged = copy.deepcopy(eom.converged)
-    if kind == 'ip':
-        star_e = eom.ipccsd_star_contract(left_e, right_v, left_v)
-    else:
-        star_e = eom.eaccsd_star_contract(left_e, right_v, left_v)
-    _, star_right_v, star_left_v = eom_rccsd._sort_left_right_eigensystem(
-        eom, right_converged, right_e, right_v, left_converged, left_e, left_v)
+    star_e = star_solve(nroots=3, right_guess=right_v)
     right_matvec, _ = eom.gen_matvec()
     left_matvec, _ = eom.gen_matvec(left=True)
     overlaps = [[numpy.dot(left, right) for right in right_v] for left in left_v]
@@ -290,9 +286,6 @@ def run_eom_kind(mycc, kind):
         'right_converged': right_converged,
         'left_converged': left_converged,
         'left_right_overlap': overlaps,
-        'matched_left_right_overlap': [
-            numpy.dot(left, right) for left, right in zip(star_left_v, star_right_v)
-        ],
         'right_residuals': [residual(right_matvec, vector, energy) for energy, vector in zip(right_e, right_v)],
         'left_residuals': [residual(left_matvec, vector, energy) for energy, vector in zip(left_e, left_v)],
         't1': array_metadata(mycc.t1),
