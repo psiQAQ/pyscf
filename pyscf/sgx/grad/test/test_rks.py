@@ -58,15 +58,20 @@ class KnownValues(unittest.TestCase):
         mf = sgx_fit(scf.RKS(mol).set(xc=xc))
         _set_df_args(mf, *df_settings)
         g = mf.nuc_grad_method().set(sgx_grid_response=True, grid_response=True).kernel()
+        self.assertTrue(mf.converged)
         mol1 = mol.copy()
         mf_scanner = mf.as_scanner()
+        # SGX roundoff in the optional extra cycle can dominate this finite difference.
+        mf_scanner.conv_check = False
         delta = 1e-4
         e1 = mf_scanner(mol1.set_geom_(
             f'O  0. 0. {delta:f}; 1  0. -0.757 0.587; 1  0. 0.757 0.587'
         ))
+        self.assertTrue(mf_scanner.converged)
         e2 = mf_scanner(mol1.set_geom_(
             f'O  0. 0. -{delta:f}; 1  0. -0.757 0.587; 1  0. 0.757 0.587'
         ))
+        self.assertTrue(mf_scanner.converged)
         # Allow round-off from thread-dependent reductions while still bounding translational noise.
         self.assertAlmostEqual(numpy.abs(g.sum(axis=0)).sum(), 0, 12)
         self.assertAlmostEqual(g[0,2], (e1-e2)/(2*delta)*lib.param.BOHR, order)
