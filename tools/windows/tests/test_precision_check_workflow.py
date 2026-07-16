@@ -197,6 +197,12 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
             'ip', refs['single'], bad_right, refs['left'], refs['star'])
         self.assertGreater(errors['right'], 5e-6)
 
+    def test_eom_diagnostic_uses_original_star_contract_call(self):
+        source = DIAGNOSTICS_SCRIPT.read_text(encoding='utf-8')
+
+        self.assertIn("eom.ipccsd_star_contract(left_e, right_v, left_v)", source)
+        self.assertIn("eom.eaccsd_star_contract(left_e, right_v, left_v)", source)
+
     def test_analyze_diagnostic_checks_original_logger_values(self):
         import numpy
 
