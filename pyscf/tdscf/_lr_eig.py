@@ -640,7 +640,9 @@ def real_eig(aop, x0, precond, tol_residual=1e-5, nroots=1, x0sym=None, pick=Non
                 y = y[:,idx]
         except np.linalg.LinAlgError:
             if fresh_start:
-                raise
+                raise RuntimeError('This error is often caused by a problematic '
+                                   'SCF solution, such as a saddle-point solution.')
+            # Reuse the last valid Ritz vectors instead of the singular expanded metric.
             log.debug('Singular trial subspace; restart from the previous Ritz vectors')
             fresh_start = True
             continue
@@ -723,14 +725,11 @@ def real_eig(aop, x0, precond, tol_residual=1e-5, nroots=1, x0sym=None, pick=Non
                 xt_ir = np.hstack(xt_orth_ir)
                 xs_ir = np.hstack([xs_ir, xt_ir])
 
-        if len(V) == 0 and x0sym is None:
-            V, W = VW_Gram_Schmidt_fill_holder(
-                V_holder[:,:m1], W_holder[:,:m1],
-                R_x[:,r_index].copy(), R_y[:,r_index].copy(), lindep)
         if len(V) == 0:
             log.debug(f'Linear dependency in trial subspace. |r| for each state {r_norms}')
             if fresh_start:
                 break
+            # Retry once from the current Ritz vectors before declaring the space exhausted.
             fresh_start = True
             continue
 
