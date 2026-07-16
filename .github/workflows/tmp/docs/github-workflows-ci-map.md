@@ -1,12 +1,13 @@
 # `.github/workflows` CI 流程地图
 
-本文记录当前分支三平台 full 验证、精度 check 以及相关脚本的职责。运行状态不写入本文，以免随 GitHub Actions 运行变化而过期。
+本文记录当前分支核心 CI、打包验证、精度 check 以及相关脚本的职责。运行状态不写入本文，以免随 GitHub Actions 运行变化而过期。
 
 ## 总览
 
 | 流程 | 平台与版本 | 触发方式 | 验证对象 | 入口 |
 | --- | --- | --- | --- | --- |
-| Full | Linux 3.8/3.12、Linux aarch64 3.9、macOS 3.13 | `workflow_dispatch` | 源码构建后的完整测试 | `ci.yml` |
+| Core CI | Linux 3.8/3.12、Linux aarch64 3.9、macOS 3.13 | `push`、`pull_request` | 源码构建后的完整测试 | `ci.yml` |
+| Conda package | Linux | `workflow_dispatch` | Conda recipe 构建 | `ci_conda.yml` |
 | Windows full | Windows 3.13 | `workflow_dispatch` | 干净环境中安装 wheel 后的完整测试 | `ci-windows.yml` |
 | Precision check | Linux 3.8/3.12/3.13、macOS 3.8/3.13、Windows 3.12/3.13 | `workflow_dispatch` | `precision-selected-nodeids.txt` 中的10项待排查测试 | `ci-precision-check.yml` |
 | Precision diagnostics | 同上，可按平台筛选；线程1/4各一组 | `workflow_dispatch` | 顺序诊断10个nodeid，保存计算中间量和限量快照 | `ci-precision-diagnostics.yml` |
@@ -15,9 +16,9 @@
 
 100次阶段按 node ID 分成3个分片；每个平台/版本产生3个 job，共21个 job。每个 node ID 只属于一个分片，并在该分片中完整运行100次。完成29项筛选实验后，名单已缩减到10项。
 
-## Full 验证
+## 核心 CI 与打包验证
 
-### Linux 与 macOS
+### Linux 与 macOS 核心 CI
 
 ```text
 ci.yml
@@ -29,10 +30,15 @@ ci.yml
       └─ pytest pyscf/
 ```
 
-- `ci.yml` 只允许手动触发。
+- `ci.yml` 沿用上游 `push`/`pull_request` 门禁，不属于手动 precision/full 打包流程。
 - Linux/macOS 在源码树构建动态库，并在源码环境运行完整测试。
 - Linux aarch64 使用 manylinux 容器中的独立构建与测试命令。
 - 这条流程与 precision check 分离，本轮不调整内部逻辑。
+
+### Linux Conda package
+
+- `ci_conda.yml` 只允许手动触发，在 Ubuntu 上构建 Conda recipe。
+- 它不运行 `ci.yml` 的完整源码测试，也不与 precision check 混用。
 
 ### Windows
 
@@ -101,7 +107,7 @@ ci-precision-check.yml
 
 ## Artifact 内容
 
-每个矩阵组合都通过 `actions/upload-artifact@v7` 上传 `tmp/precision-results/`，即使测试失败也执行上传步骤。
+每个 precision check 矩阵组合都通过 `actions/upload-artifact@v7` 上传 `tmp/precision-results/`，即使测试失败也执行上传步骤。
 
 通用内容：
 
@@ -120,21 +126,22 @@ Windows 另外包含：
 - installed-wheel Markdown/JSON 报告
 - `.github/workflows/ci_windows/build-logs/`
 
-下载7份 artifact 后，可以比较失败频率、完整错误日志、包版本、编译环境、原生库及 wheel 信息，并据此生成跨平台分析报告。
+下载当前 21 份分片 artifact 后，可以比较失败频率、完整错误日志、包版本、编译环境、原生库及 wheel 信息，并据此生成跨平台分析报告。
 
-100次分片运行会产生21份 artifact，名称带 `shard-0`、`shard-1` 或 `shard-2`。同一平台的3份 `summary.csv` 和 `attempts.csv` 合并后覆盖原来的29项，每项仍有100次记录。
+100次分片运行会产生21份 artifact，名称带 `shard-0`、`shard-1` 或 `shard-2`。同一平台的3份 `summary.csv` 和 `attempts.csv` 合并后覆盖当前10项，每项仍有100次记录。
 
 ## 文件职责
 
 | 文件 | 职责 |
 | --- | --- |
-| `ci.yml` | Linux/macOS full 工作流 |
+| `ci.yml` | Linux/macOS 核心 `push`/`pull_request` CI |
+| `ci_conda.yml` | 手动 Linux Conda package 构建 |
 | `ci-windows.yml` | Windows full 工作流 |
 | `ci-precision-check.yml` | 三平台10项精度 check |
 | `ci-precision-diagnostics.yml` | 手动、非 gating 的计算路径诊断 |
 | `precision-selected-nodeids.txt` | 三平台共享的10项待排查 node ID |
 | `precision_experiments.py` | 9类诊断入口、中间量与限量快照记录器 |
-| `run_ci.sh`、`run_tests.sh` | Linux/macOS full 调度与测试 |
+| `run_ci.sh`、`run_tests.sh` | Linux/macOS 核心 CI 调度与测试 |
 | `run_ci_windows.ps1` | Windows full 主调度，保留旧 check 入口 |
 | `run_unix_precision_tests.sh` | Linux/macOS precision check runner |
 | `run_windows_precision_tests.ps1` | Windows precision check runner |
