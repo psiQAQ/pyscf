@@ -8,3 +8,4 @@ pyscf/mcscf/test/test_umc1step.py::KnownValues::test_ucasscf
 pyscf/mcscf/test/test_h2o.py::KnownValues::test_nosymm_sa4_newton
 pyscf/sgx/grad/test/test_rks.py::KnownValues::test_finite_diff_grad
 pyscf/pbc/tdscf/test/test_uks.py::DiamondM06::test_hse03_tda
+pyscf/scf/test/test_addons.py::KnownValues::test_uhf_smearing
