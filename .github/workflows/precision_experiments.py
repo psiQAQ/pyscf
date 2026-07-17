@@ -456,7 +456,6 @@ def run_uhf_smearing(args, recorder):
             mf = addons.smearing_(
                 scf.UHF(mol), sigma=.1, method='fermi', fix_spin=False)
             mf.conv_tol = 1e-7
-            mf.conv_check = False
             history = []
 
             def chemical_potential(mo_energy):
@@ -490,7 +489,6 @@ def run_uhf_smearing(args, recorder):
                 'fixed_energy': fixed.e_tot,
                 'fixed_entropy': fixed.entropy,
                 'conv_tol': mf.conv_tol,
-                'conv_check': mf.conv_check,
                 'energy': mf.e_tot,
                 'energy_error': energy_error,
                 'entropy': mf.entropy,
