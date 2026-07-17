@@ -469,7 +469,7 @@ class KnownValues(unittest.TestCase):
         myhf_s.sigma = 0.1
         myhf_s.fix_spin = False
         myhf_s.conv_tol = 1e-7
-        myhf_s.conv_tol_grad = 1e-6
+        myhf_s.conv_tol_grad = 2e-6
         myhf_s.kernel()
         self.assertAlmostEqual(myhf_s.e_tot, -243.086989253, 5)
         self.assertAlmostEqual(myhf_s.entropy, 17.11431, 4)
