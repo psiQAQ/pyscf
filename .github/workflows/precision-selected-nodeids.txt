@@ -9,3 +9,5 @@ pyscf/mcscf/test/test_h2o.py::KnownValues::test_nosymm_sa4_newton
 pyscf/sgx/grad/test/test_rks.py::KnownValues::test_finite_diff_grad
 pyscf/pbc/tdscf/test/test_uks.py::DiamondM06::test_hse03_tda
 pyscf/scf/test/test_addons.py::KnownValues::test_uhf_smearing
+pyscf/cc/test/test_rccsd.py::KnownValues::test_update_amps
+pyscf/x2c/test/test_x2c.py::KnownValues::test_lindep_xbasis
