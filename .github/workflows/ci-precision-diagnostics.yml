@@ -22,11 +22,13 @@ on:
           - sgx-wb97x
           - tddft
           - analyze
+          - uhf-smearing
           - split-eom
           - split-ucasscf
           - split-sa4-newton
           - split-tddft
           - split-analyze
+          - split-uhf-smearing
           - split-pbc-hse03
           - split-pbc-hse06
           - split-pbc-tdhf-replay
@@ -67,6 +69,16 @@ on:
           - ubuntu
           - macos
           - windows
+      python_version:
+        description: Python version; select a matching platform when not using all
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - "3.8"
+          - "3.12"
+          - "3.13"
       libxc_revision:
         description: LibXC commit for diagnostics
         required: true
@@ -89,7 +101,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.8", "3.12", "3.13"]
+        python-version: ${{ fromJSON(inputs.python_version == 'all' && '["3.8","3.12","3.13"]' || format('["{0}"]', inputs.python_version)) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v6
@@ -136,7 +148,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.8", "3.13"]
+        python-version: ${{ fromJSON(inputs.python_version == 'all' && '["3.8","3.13"]' || format('["{0}"]', inputs.python_version)) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v6
@@ -189,7 +201,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12", "3.13"]
+        python-version: ${{ fromJSON(inputs.python_version == 'all' && '["3.12","3.13"]' || format('["{0}"]', inputs.python_version)) }}
     steps:
       - uses: actions/checkout@v4
       - uses: conda-incubator/setup-miniconda@v4

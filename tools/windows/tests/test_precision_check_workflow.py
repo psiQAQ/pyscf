@@ -183,6 +183,18 @@ class PrecisionCheckWorkflowTests(unittest.TestCase):
         self.assertEqual(module.ucasscf_status(-75.7460662487894), 'pass')
         self.assertEqual(module.ucasscf_status(-75.746), 'reference_mismatch')
 
+    def test_uhf_smearing_status_matches_original_assertions(self):
+        spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.assertEqual(module.uhf_smearing_status(-243.086989253, 17.11431, True), 'pass')
+        self.assertEqual(module.uhf_smearing_status(-243.086994644, 17.11431, True),
+                         'reference_mismatch')
+        self.assertEqual(module.uhf_smearing_status(-243.086989253, 17.115, True),
+                         'reference_mismatch')
+        self.assertEqual(module.uhf_smearing_status(-243.086989253, 17.11431, False),
+                         'not_converged')
+
     def test_eom_diagnostic_checks_every_original_assertion(self):
         spec = importlib.util.spec_from_file_location('precision_experiments', DIAGNOSTICS_SCRIPT)
         module = importlib.util.module_from_spec(spec)
@@ -803,16 +815,22 @@ output.mkdir(parents=True, exist_ok=True)
         self.assertEqual(text.count('uses: actions/upload-artifact@v7'), 3)
         self.assertNotIn('matrix.threads', text)
         self.assertNotIn('threads: ["1", "4"]', text)
-        self.assertIn('python-version: ["3.8", "3.12", "3.13"]', text)
-        self.assertIn('python-version: ["3.8", "3.13"]', text)
-        self.assertIn('python-version: ["3.12", "3.13"]', text)
+        self.assertIn("'[\"3.8\",\"3.12\",\"3.13\"]'", text)
+        self.assertIn("'[\"3.8\",\"3.13\"]'", text)
+        self.assertIn("'[\"3.12\",\"3.13\"]'", text)
         self.assertIn('run_paired_precision_diagnostics.py', text)
         self.assertIn('-Paired', text)
         for experiment in ('split-eom', 'split-ucasscf', 'split-sa4-newton',
                            'split-tddft', 'split-analyze', 'split-pbc-hse03', 'split-pbc-hse06',
-                           'split-sgx-pbe0', 'split-sgx-wb97x'):
+                           'split-sgx-pbe0', 'split-sgx-wb97x', 'split-uhf-smearing'):
             self.assertIn(f'          - {experiment}', text)
         self.assertIn('${{ inputs.experiment }}/*/summary.md', text)
+
+    def test_paired_workflow_can_select_one_python_job(self):
+        workflow = PAIRED_DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')
+
+        self.assertIn('      python_version:', workflow)
+        self.assertEqual(workflow.count("format('[\"{0}\"]', inputs.python_version)"), 3)
 
     def test_paired_workflow_can_shard_split_profiles(self):
         workflow = PAIRED_DIAGNOSTICS_WORKFLOW.read_text(encoding='utf-8')

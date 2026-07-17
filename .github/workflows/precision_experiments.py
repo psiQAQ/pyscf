@@ -48,6 +48,7 @@ NODEIDS = {
     'sgx': 'pyscf/sgx/grad/test/test_rks.py::KnownValues::test_finite_diff_grad',
     'tddft': 'pyscf/tdscf/test/test_tduks.py::KnownValues::test_tddft_camb3lyp',
     'analyze': 'pyscf/tdscf/test/test_tduks.py::KnownValues::test_analyze',
+    'uhf-smearing': 'pyscf/scf/test/test_addons.py::KnownValues::test_uhf_smearing',
 }
 
 
@@ -424,6 +425,94 @@ def run_ucasscf(args, recorder):
         current = checkpoints / f'{mode}-current.chk'
         if current.exists():
             current.unlink()
+
+
+def uhf_smearing_status(energy, entropy, converged):
+    if not converged:
+        return 'not_converged'
+    if (round(abs(float(energy) - (-243.086989253)), 5) == 0 and
+            round(abs(float(entropy) - 17.11431), 4) == 0):
+        return 'pass'
+    return 'reference_mismatch'
+
+
+def run_uhf_smearing(args, recorder):
+    import numpy
+    from pyscf import gto, scf
+    from pyscf.scf import addons
+    from pyscf.scf.smearing import _fermi_smearing_occ, _smearing_optimize
+
+    for attempt in range(1, args.repeats + 1):
+        log_path = recorder.log_path('uhf-smearing', attempt)
+        start = time.monotonic()
+        mol = None
+        try:
+            mol = gto.M(
+                atom='Fe 0 0 0; Fe 2.01 0 0', basis='lanl2dz', ecp='lanl2dz',
+                symmetry=False, unit='Angstrom', spin=6, charge=0,
+                verbose=4, output=str(log_path))
+            fixed = addons.smearing_(
+                scf.UHF(mol), sigma=.01, method='fermi', fix_spin=True).run()
+            mf = addons.smearing_(
+                scf.UHF(mol), sigma=.1, method='fermi', fix_spin=False)
+            mf.conv_tol = 1e-7
+            history = []
+
+            def chemical_potential(mo_energy):
+                return _smearing_optimize(
+                    _fermi_smearing_occ, numpy.hstack(mo_energy),
+                    mol.nelectron, mf.sigma)[0]
+
+            def callback(envs):
+                history.append({
+                    'cycle': envs['cycle'],
+                    'energy': envs['e_tot'],
+                    'norm_gorb': envs['norm_gorb'],
+                    'norm_ddm': envs['norm_ddm'],
+                    'chemical_potential': chemical_potential(envs['mo_energy']),
+                    'density': array_metadata(envs['dm']),
+                    'mo_energy': array_metadata(envs['mo_energy']),
+                    'mo_occ': array_metadata(envs['mo_occ']),
+                })
+
+            mf.callback = callback
+            mf.kernel()
+            energy_error = float(mf.e_tot - (-243.086989253))
+            entropy_error = float(mf.entropy - 17.11431)
+            status = uhf_smearing_status(mf.e_tot, mf.entropy, mf.converged)
+            signature = ('uhf-smearing-pass' if status == 'pass' else
+                         f'uhf-smearing-{status}-energy-{error_bucket(energy_error)}')
+            arrays = snapshot_arrays(
+                fixed_density=fixed.make_rdm1(), density=mf.make_rdm1(),
+                mo_coeff=mf.mo_coeff, mo_energy=mf.mo_energy, mo_occ=mf.mo_occ)
+            recorder.record(attempt, 'uhf-smearing', status, time.monotonic() - start, {
+                'fixed_energy': fixed.e_tot,
+                'fixed_entropy': fixed.entropy,
+                'energy': mf.e_tot,
+                'energy_error': energy_error,
+                'entropy': mf.entropy,
+                'entropy_error': entropy_error,
+                'converged': mf.converged,
+                'cycles': mf.cycles,
+                'main_cycle_energy': history[-1]['energy'],
+                'extra_cycle_energy_delta': mf.e_tot - history[-1]['energy'],
+                'chemical_potential': chemical_potential(mf.mo_energy),
+                'history': history,
+                'density': array_metadata(mf.make_rdm1()),
+                'mo_energy': array_metadata(mf.mo_energy),
+                'mo_occ': array_metadata(mf.mo_occ),
+                'failure_signature': signature if status != 'pass' else None,
+                'snapshot_file': recorder.save_snapshot_once(status, signature, arrays),
+                'log_file': str(log_path),
+            })
+        except Exception:
+            recorder.record(attempt, 'uhf-smearing', 'exception', time.monotonic() - start, {
+                'log_file': str(log_path), 'traceback': traceback.format_exc(),
+            })
+        finally:
+            close_mol(mol)
+        if experiment_complete(recorder):
+            break
 
 
 def build_sgx_molecule(log_path):
@@ -1397,7 +1486,7 @@ def run_analyze(args, recorder):
 
 EXPERIMENTS = (
     'eom', 'pbc-tdhf', 'pbc-hse06', 'pbc-hse03', 'ucasscf',
-    'sa4-newton', 'sgx', 'tddft', 'analyze',
+    'sa4-newton', 'sgx', 'tddft', 'analyze', 'uhf-smearing',
 )
 
 
@@ -1424,6 +1513,7 @@ def run_experiment(experiment, args, output):
                 'sa4-newton': run_sa4_newton,
                 'tddft': run_tddft,
                 'analyze': run_analyze,
+                'uhf-smearing': run_uhf_smearing,
             }[experiment](args, recorder)
     finally:
         recorder.finish()
