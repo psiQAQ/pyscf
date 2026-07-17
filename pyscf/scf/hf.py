@@ -190,7 +190,6 @@ Keyword argument "init_dm" is replaced by "dm0"''')
         log.info('cycle= %d E= %.15g  delta_E= %4.3g  |g|= %4.3g  |ddm|= %4.3g',
                  cycle+1, e_tot, e_tot-last_hf_e, norm_gorb, norm_ddm)
 
-        extra_cycle = False
         if callable(mf.check_convergence):
             scf_conv = mf.check_convergence(locals())
         elif abs(e_tot-last_hf_e) < conv_tol and norm_gorb < conv_tol_grad:
@@ -204,12 +203,11 @@ Keyword argument "init_dm" is replaced by "dm0"''')
 
         cput1 = log.timer('cycle= %d'%(cycle+1), *cput1)
 
-        if not scf_conv:
-            continue
-        if not conv_check:
+        if scf_conv:
             break
 
-        extra_cycle = True
+    mf.cycles = cycle + 1
+    if scf_conv and conv_check:
         # An extra diagonalization, to remove level shift
         #fock = mf.get_fock(h1e, s1e, vhf, dm)  # = h1e + vhf
         mo_energy, mo_coeff = mf.eig(fock, s1e, x=x_orth)
@@ -224,27 +222,18 @@ Keyword argument "init_dm" is replaced by "dm0"''')
             norm_gorb = norm_gorb / numpy.sqrt(norm_gorb.size)
         norm_ddm = numpy.linalg.norm(dm-dm_last)
 
-        extra_envs = dict(locals(),
-                          conv_tol=conv_tol * 10,
-                          conv_tol_grad=conv_tol_grad * 3)
+        conv_tol = conv_tol * 10
+        conv_tol_grad = conv_tol_grad * 3
         if callable(mf.check_convergence):
-            scf_conv = mf.check_convergence(extra_envs)
-        elif (abs(e_tot-last_hf_e) < extra_envs['conv_tol'] or
-              norm_gorb < extra_envs['conv_tol_grad']):
+            scf_conv = mf.check_convergence(locals())
+        elif abs(e_tot-last_hf_e) < conv_tol or norm_gorb < conv_tol_grad:
             scf_conv = True
         else:
             scf_conv = False
         log.info('Extra cycle  E= %.15g  delta_E= %4.3g  |g|= %4.3g  |ddm|= %4.3g',
                  e_tot, e_tot-last_hf_e, norm_gorb, norm_ddm)
         if dump_chk and mf.chkfile:
-            extra_envs['scf_conv'] = scf_conv
-            mf.dump_chk(extra_envs)
-        if scf_conv:
-            break
-        # Continue from the physical-Fock density rejected by the extra check.
-        fock_last = fock
-
-    mf.cycles = cycle + 1
+            mf.dump_chk(locals())
 
     log.timer('scf_cycle', *cput0)
     # A post-processing hook before return
