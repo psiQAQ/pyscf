@@ -1,6 +1,10 @@
 param(
     [string]$RepoRoot = '',
-    [string]$ReportDirectory = 'tmp/windows-installed-wheel'
+    [string]$ReportDirectory = 'tmp/windows-installed-wheel',
+    [string]$PrecisionNodeIdsFile = '',
+    [int]$PrecisionRepeats = 0,
+    [string]$PrecisionProfile = '',
+    [string]$TestedSha = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -15,6 +19,20 @@ $runRoot = Join-Path $runnerTemp 'pyscf-installed-wheel'
 $launchRoot = Join-Path $runRoot 'launch'
 $venv = Join-Path $runRoot '.venv'
 $savedPytestAddopts = $env:PYTEST_ADDOPTS
+$precisionMode = [bool]$PrecisionNodeIdsFile
+
+if ($precisionMode) {
+    $PrecisionNodeIdsFile = (Resolve-Path -LiteralPath $PrecisionNodeIdsFile).Path
+    if ($PrecisionRepeats -lt 1 -or $PrecisionProfile -notin @('1/1', '4/1', '1/4', '4/4')) {
+        throw 'Precision mode requires positive repeats and profile 1/1, 4/1, 1/4, or 4/4'
+    }
+    if (-not $TestedSha) {
+        $TestedSha = if ($env:GITHUB_SHA) { $env:GITHUB_SHA } else { (& git -C $RepoRoot rev-parse HEAD).Trim() }
+    }
+}
+elseif ($PrecisionRepeats -or $PrecisionProfile -or $TestedSha) {
+    throw 'Precision mode parameters require -PrecisionNodeIdsFile'
+}
 
 function Add-PackageMarker([string]$Directory) {
     $marker = Join-Path $Directory '__init__.py'
@@ -91,21 +109,23 @@ try {
     & $python -VV 2>&1 | Set-Content -LiteralPath (Join-Path $reportDir 'environment.txt') -Encoding utf8
     & $python -m pip freeze | Add-Content -LiteralPath (Join-Path $reportDir 'environment.txt') -Encoding utf8
 
-    $junitPath = Join-Path $reportDir 'pytest-results.xml'
-    $pytestArgs = @(
-        'pyscf',
-        '-s',
-        '-c', $pytestConfig,
-        '--rootdir', '.',
-        '--import-mode=prepend',
-        '--durations=20',
-        "--junitxml=$junitPath"
-    )
-    @(
-        "pytest.ini SHA256: $((Get-FileHash -LiteralPath $pytestConfig -Algorithm SHA256).Hash.ToLowerInvariant())",
-        "python -m pytest $($pytestArgs -join ' ')"
-    ) | Set-Content -LiteralPath (Join-Path $reportDir 'pytest-selection.txt') -Encoding utf8
     Copy-Item -LiteralPath $pytestConfig -Destination (Join-Path $reportDir 'pytest.ini') -Force
+    if (-not $precisionMode) {
+        $junitPath = Join-Path $reportDir 'pytest-results.xml'
+        $pytestArgs = @(
+            'pyscf',
+            '-s',
+            '-c', $pytestConfig,
+            '--rootdir', '.',
+            '--import-mode=prepend',
+            '--durations=20',
+            "--junitxml=$junitPath"
+        )
+        @(
+            "pytest.ini SHA256: $((Get-FileHash -LiteralPath $pytestConfig -Algorithm SHA256).Hash.ToLowerInvariant())",
+            "python -m pytest $($pytestArgs -join ' ')"
+        ) | Set-Content -LiteralPath (Join-Path $reportDir 'pytest-selection.txt') -Encoding utf8
+    }
 
     # Launch outside the checkout so cwd cannot shadow the installed package.
     Push-Location $sitePackages
@@ -115,35 +135,66 @@ try {
         if ($LASTEXITCODE -ne 0) {
             throw 'Installed-wheel import smoke failed'
         }
-        & $python -m pytest @pytestArgs 2>&1 |
-            Tee-Object -FilePath (Join-Path $reportDir 'pytest.log')
-        $pytestExitCode = $LASTEXITCODE
+        if ($precisionMode) {
+            & $python (Join-Path $RepoRoot '.github\workflows\run_precision_tests.py') `
+                --nodeids-file $PrecisionNodeIdsFile `
+                --repeats $PrecisionRepeats `
+                --profile $PrecisionProfile `
+                --output-dir $reportDir `
+                --tested-sha $TestedSha `
+                --working-directory $sitePackages `
+                --rootdir $sitePackages `
+                --pytest-config $pytestConfig `
+                --collector (Join-Path $RepoRoot '.github\workflows\collect_precision_environment.py')
+            $pytestExitCode = $LASTEXITCODE
+        }
+        else {
+            & $python -m pytest @pytestArgs 2>&1 |
+                Tee-Object -FilePath (Join-Path $reportDir 'pytest.log')
+            $pytestExitCode = $LASTEXITCODE
+        }
     }
     finally {
         Pop-Location
         Remove-Item Env:PYSCF_CONFIG_FILE -ErrorAction SilentlyContinue
     }
     $pytestExitCode | Set-Content -LiteralPath (Join-Path $reportDir 'pytest-exit-code.txt') -Encoding ascii
-    $pytestSummary = Get-Content -LiteralPath (Join-Path $reportDir 'pytest.log') |
-        Where-Object { $_ -match '\d+ (passed|failed|error|errors|skipped|deselected)' } |
-        Select-Object -Last 1
-    if (-not $pytestSummary) {
-        $pytestSummary = 'pytest summary not found; inspect pytest.log'
-    }
     $wheelBytes = (Get-Content -LiteralPath (Join-Path $reportDir 'wheel-size.txt') -Raw).Trim()
     $wheelHash = (Get-Content -LiteralPath (Join-Path $reportDir 'wheel-sha256.txt') -Raw).Trim()
-    $summary = @(
-        '# CI Windows summary',
-        '',
-        "- Wheel: $($wheels[0].Name)",
-        "- Wheel bytes: $wheelBytes",
-        "- Wheel SHA256: $wheelHash",
-        '- pip check: passed',
-        "- pytest exit code: $pytestExitCode",
-        "- pytest: $pytestSummary",
-        '- JUnit: pytest-results.xml'
-    )
-    $summaryPath = Join-Path $reportDir 'summary.md'
+    if ($precisionMode) {
+        $summary = @(
+            '# Installed-wheel precision verification',
+            '',
+            "- Wheel: $($wheels[0].Name)",
+            "- Wheel bytes: $wheelBytes",
+            "- Wheel SHA256: $wheelHash",
+            '- pip check: passed',
+            '- import smoke: passed',
+            "- precision exit code: $pytestExitCode",
+            '- Precision evidence: summary.md, summary.csv, records.jsonl, logs/, environment/'
+        )
+        $summaryPath = Join-Path $reportDir 'installed-wheel-summary.md'
+    }
+    else {
+        $pytestSummary = Get-Content -LiteralPath (Join-Path $reportDir 'pytest.log') |
+            Where-Object { $_ -match '\d+ (passed|failed|error|errors|skipped|deselected)' } |
+            Select-Object -Last 1
+        if (-not $pytestSummary) {
+            $pytestSummary = 'pytest summary not found; inspect pytest.log'
+        }
+        $summary = @(
+            '# CI Windows summary',
+            '',
+            "- Wheel: $($wheels[0].Name)",
+            "- Wheel bytes: $wheelBytes",
+            "- Wheel SHA256: $wheelHash",
+            '- pip check: passed',
+            "- pytest exit code: $pytestExitCode",
+            "- pytest: $pytestSummary",
+            '- JUnit: pytest-results.xml'
+        )
+        $summaryPath = Join-Path $reportDir 'summary.md'
+    }
     $summary | Set-Content -LiteralPath $summaryPath -Encoding utf8
     if ($env:GITHUB_STEP_SUMMARY) {
         $summary | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8
