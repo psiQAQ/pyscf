@@ -128,6 +128,7 @@ Notes:
 
 Useful `verify-installed-wheel.ps1` parameters:
 
+- `-PytestNodeIds <nodeids...>`: explicitly run one or more pytest nodeids from repository test files. Nodeids from the same `test` directory share one staged copy; `::Class::test` suffixes are preserved. This opt-in mode overrides directory discovery for that invocation and does not deselect, retry, or relax any test.
 - `-TestRoots <paths...>`: only run the listed test directories or module roots. When invoking the script through `powershell -File`, use comma-separated values, for example `-TestRoots 'pyscf\gto\test','pyscf\scf\test'`
 - `-ExcludeTestRoots <paths...>`: exclude one or more directories or subtrees from the discovered test set, for example `-ExcludeTestRoots pyscf\pbc`
 - `-SkipPbc`: shorthand to exclude the entire `pyscf\pbc` subtree while leaving the rest of the repository unchanged
@@ -142,6 +143,11 @@ Useful `verify-installed-wheel.ps1` parameters:
 Examples:
 
 ```powershell
+# Run two exact installed-wheel tests from one staged test directory
+powershell -ExecutionPolicy Bypass -File .\tools\windows\verify-installed-wheel.ps1 `
+  -SkipBuild `
+  -PytestNodeIds 'pyscf\scf\test\test_addons.py::KnownValues::test_uhf_smearing','pyscf\scf\test\test_addons.py::KnownValues::test_dynamic_level_shift'
+
 # Run only the gto and scf installed-wheel tests
 powershell -ExecutionPolicy Bypass -File .\tools\windows\verify-installed-wheel.ps1 `
   -SkipBuild `

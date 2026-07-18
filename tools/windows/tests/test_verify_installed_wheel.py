@@ -100,6 +100,58 @@ if (Test-Path -LiteralPath $sentinel) { throw 'stale staged file survived' }
 
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    @unittest.skipUnless(shutil.which("powershell") or shutil.which("pwsh"), "PowerShell is required")
+    def test_nodeids_in_the_same_file_share_one_staged_directory(self):
+        powershell = shutil.which("powershell") or shutil.which("pwsh")
+        command = r'''
+$scriptPath = $env:NODEID_TEST_SCRIPT
+$repoRoot = $env:NODEID_TEST_REPO_ROOT
+$tokens = $null
+$errors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    $scriptPath, [ref]$tokens, [ref]$errors)
+foreach ($name in @(
+    'Expand-PathArguments',
+    'Get-RelativePath',
+    'Get-LogicalPath',
+    'Split-PytestNodeId',
+    'Get-PytestNodeGroups',
+    'Get-VerificationRunItems'
+)) {
+    $node = $ast.FindAll({
+        param($item)
+        $item -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $item.Name -eq $name
+    }, $true)[0]
+    Invoke-Expression $node.Extent.Text
+}
+$groups = @(Get-VerificationRunItems -RepoRoot $repoRoot -ConfiguredNodeIds @(
+    'pyscf/demo/test/test_demo.py::KnownValues::test_one',
+    'pyscf/demo/test/test_demo.py::KnownValues::test_two'
+) -ConfiguredRoots @() -ExcludedRoots @() -SkipPbc:$false)
+if ($groups.Count -ne 1) { throw "expected one group, got $($groups.Count)" }
+if ($groups[0].nodeids.Count -ne 2) { throw 'expected two nodeids' }
+if ($groups[0].nodeids[0].relative_file -ne 'test_demo.py') { throw 'wrong relative file' }
+$suffixes = @($groups[0].nodeids | ForEach-Object suffix)
+if ($suffixes[0] -ne '::KnownValues::test_one') { throw 'first suffix was not preserved' }
+if ($suffixes[1] -ne '::KnownValues::test_two') { throw 'second suffix was not preserved' }
+'''
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = pathlib.Path(tmp) / "repo"
+            test_dir = repo_root / "pyscf" / "demo" / "test"
+            test_dir.mkdir(parents=True)
+            (test_dir / "test_demo.py").write_text("pass\n", encoding="utf-8")
+            env = os.environ.copy()
+            env.update({
+                "NODEID_TEST_SCRIPT": str(VERIFY_WHEEL),
+                "NODEID_TEST_REPO_ROOT": str(repo_root),
+            })
+            result = subprocess.run(
+                [powershell, "-NoProfile", "-Command", command],
+                capture_output=True, text=True, check=False, env=env,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_script_exists_and_reuses_build_wheel_entrypoint(self):
         text = VERIFY_WHEEL.read_text(encoding="utf-8")
         self.assertIn("build-wheel.ps1", text)
@@ -193,6 +245,8 @@ if (Test-Path -LiteralPath $sentinel) { throw 'stale staged file survived' }
 
     def test_script_supports_optional_test_exclusions(self):
         text = VERIFY_WHEEL.read_text(encoding="utf-8")
+        self.assertIn("[string[]]$PytestNodeIds", text)
+        self.assertNotIn("ExcludePytestNodeIds", text)
         self.assertIn("[string[]]$ExcludeTestRoots", text)
         self.assertIn("[switch]$SkipPbc", text)
         self.assertIn("ExcludeTestRoots", text)
@@ -203,6 +257,7 @@ if (Test-Path -LiteralPath $sentinel) { throw 'stale staged file survived' }
 class Win64PackageReadmeTests(unittest.TestCase):
     def test_readme_documents_verification_parameters(self):
         readme = (REPO_ROOT / "tools" / "windows" / "win64-package-readme.md").read_text(encoding="utf-8")
+        self.assertIn("-PytestNodeIds", readme)
         self.assertIn("-TestRoots", readme)
         self.assertIn("-ExcludeTestRoots", readme)
         self.assertIn("-SkipBuild", readme)
