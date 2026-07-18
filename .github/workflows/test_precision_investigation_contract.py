@@ -23,21 +23,31 @@ def load_runner():
 
 
 class PrecisionInvestigationContractTest(unittest.TestCase):
-    def test_template_selection_is_empty_and_case_neutral(self):
+    def test_template_selection_is_empty_and_catalogs_unresolved_families(self):
         selection = read('.github/workflows/precision-selected-nodeids.txt')
         active = [
             line.strip() for line in selection.splitlines()
             if line.strip() and not line.lstrip().startswith('#')
         ]
         self.assertEqual(active, [])
-        for historical_case in (
-            'test_nosymm_sa4_newton',
-            'test_uhf_smearing',
-            'test_finite_diff_grad',
-            'test_update_amps',
-            'test_lindep_xbasis',
-        ):
-            self.assertNotIn(historical_case, selection)
+        catalog = [
+            line.removeprefix('# ') for line in selection.splitlines()
+            if line.startswith('# pyscf/')
+        ]
+        self.assertEqual(len([
+            line for line in selection.splitlines() if line.startswith('# Family: ')
+        ]), 6)
+        self.assertEqual(catalog, [
+            'pyscf/cc/test/test_eom_gccsd.py::KnownValues::test_ipccsd',
+            'pyscf/cc/test/test_eom_gccsd.py::KnownValues::test_eaccsd',
+            'pyscf/mcscf/test/test_h2o.py::KnownValues::test_nosymm_sa4_newton',
+            'pyscf/scf/test/test_addons.py::KnownValues::test_uhf_smearing',
+            'pyscf/cc/test/test_rccsd.py::KnownValues::test_update_amps',
+            'pyscf/x2c/test/test_x2c.py::KnownValues::test_lindep_xbasis',
+            'pyscf/pbc/tdscf/test/test_rks.py::Diamond::test_hse06_tda',
+            'pyscf/sgx/grad/test/test_rks.py::KnownValues::test_finite_diff_grad',
+            'pyscf/pbc/tdscf/test/test_uks.py::DiamondM06::test_hse03_tda',
+        ])
 
     def test_workflow_requires_explicit_generic_inputs_and_always_uploads(self):
         workflow = read('.github/workflows/ci-precision-check.yml')

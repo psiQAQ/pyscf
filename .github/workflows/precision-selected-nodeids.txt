@@ -1,2 +1,23 @@
-# Template placeholder. A child investigation branch must add one exact pytest
-# nodeid per line. Keep one root-cause family per branch and do not weaken tests.
+# Unresolved catalog. In a child investigation branch, uncomment exactly one
+# root-cause family. Keep the template itself inactive and do not weaken tests.
+
+# Family: EOM GCCSD direct-contract stability
+# pyscf/cc/test/test_eom_gccsd.py::KnownValues::test_ipccsd
+# pyscf/cc/test/test_eom_gccsd.py::KnownValues::test_eaccsd
+
+# Family: SA4 Newton zero-step root cause
+# pyscf/mcscf/test/test_h2o.py::KnownValues::test_nosymm_sa4_newton
+
+# Family: UHF smearing Extra-cycle convergence
+# pyscf/scf/test/test_addons.py::KnownValues::test_uhf_smearing
+
+# Family: Windows RCCSD reduction boundary
+# pyscf/cc/test/test_rccsd.py::KnownValues::test_update_amps
+
+# Family: Windows X2C overlap/LAPACK fallback
+# pyscf/x2c/test/test_x2c.py::KnownValues::test_lindep_xbasis
+
+# Family: LibXC 7.1 released-dependency revalidation
+# pyscf/pbc/tdscf/test/test_rks.py::Diamond::test_hse06_tda
+# pyscf/sgx/grad/test/test_rks.py::KnownValues::test_finite_diff_grad
+# pyscf/pbc/tdscf/test/test_uks.py::DiamondM06::test_hse03_tda
