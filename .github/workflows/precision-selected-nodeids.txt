@@ -1,0 +1,2 @@
+# Template placeholder. A child investigation branch must add one exact pytest
+# nodeid per line. Keep one root-cause family per branch and do not weaken tests.
