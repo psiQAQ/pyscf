@@ -4,6 +4,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 
@@ -200,6 +201,32 @@ class PrecisionInvestigationContractTest(unittest.TestCase):
             self.assertEqual(
                 Path(runtime['key_modules']['pyscf']['path']).resolve(),
                 package_init.resolve(),
+            )
+
+    def test_macos_native_library_linkage_uses_otool_l(self):
+        collector = load_collector()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            package = Path(tmpdir) / 'pyscf'
+            libdir = package / 'lib'
+            libdir.mkdir(parents=True)
+            package_init = package / '__init__.py'
+            package_init.write_text('', encoding='utf-8')
+            library = libdir / 'libxc_itrf.dylib'
+            library.write_bytes(b'test-dylib')
+
+            with mock.patch.object(
+                    collector.platform, 'system', return_value='Darwin'
+            ), mock.patch.object(
+                    collector, 'run_command', return_value={
+                        'returncode': 0, 'output': ''
+                    }
+            ) as run_command:
+                collector.native_libraries(
+                    SimpleNamespace(__file__=str(package_init))
+                )
+
+            run_command.assert_called_once_with(
+                ('otool', '-L', str(library.resolve()))
             )
 
     def test_mode_aware_snapshot_records_pip_check_once(self):
