@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -20,6 +21,40 @@ def load_runner():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def load_collector():
+    path = ROOT / '.github/workflows/collect_precision_environment.py'
+    spec = importlib.util.spec_from_file_location(
+        'collect_precision_environment', path
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def write_runtime_snapshot(
+        output_dir, *, mode, returncode, pyscf_path, error=None):
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / 'pip-check.txt').write_text(
+        'test pip check output\n', encoding='utf-8'
+    )
+    runtime_path = output_dir / 'runtime.json'
+    runtime_path.write_text(json.dumps({
+        'schema_version': 2,
+        'python': {'executable': sys.executable},
+        'key_modules': {
+            'pyscf': {'path': str(pyscf_path), 'version': 'test-version'},
+        },
+        'pip_check': {
+            'mode': mode,
+            'command': [sys.executable, '-m', 'pip', 'check'],
+            'returncode': returncode,
+            'error': error,
+            'output_file': 'pip-check.txt',
+        },
+    }), encoding='utf-8')
+    return runtime_path
 
 
 class PrecisionInvestigationContractTest(unittest.TestCase):
@@ -68,11 +103,15 @@ class PrecisionInvestigationContractTest(unittest.TestCase):
             self.assertIn(value, workflow)
         self.assertNotIn('matrix:', workflow)
         self.assertNotIn('shard', workflow.lower())
+        unix_runner = read('.github/workflows/run_unix_precision_tests.sh')
+        self.assertIn('--environment-mode source-tree', unix_runner)
 
     def test_windows_precision_reuses_formal_installed_wheel_path(self):
         runner = read('.github/workflows/run_windows_precision_tests.ps1')
+        verify = read('.github/workflows/ci_windows/verify_installed_wheel.ps1')
         self.assertIn('ci_windows\\build_wheel.ps1', runner)
         self.assertIn('ci_windows\\verify_installed_wheel.ps1', runner)
+        self.assertIn('--environment-mode installed-wheel', verify)
         for obsolete in (
             'verify_installed_wheel_ci.ps1',
             'create_build_env.ps1',
@@ -149,10 +188,13 @@ class PrecisionInvestigationContractTest(unittest.TestCase):
                 working_directory / 'evidence',
                 working_directory,
                 environment,
+                'source-tree',
             )
 
             self.assertEqual(environment['PYTHONPATH'], str(existing_pythonpath))
             runtime = json.loads(runtime_path.read_text(encoding='utf-8'))
+            self.assertEqual(runtime['schema_version'], 2)
+            self.assertEqual(runtime['pip_check']['mode'], 'source-tree')
             self.assertNotIn('pyscf_import_error', runtime)
             self.assertEqual(runtime['key_modules']['pyscf']['version'], 'source-tree')
             self.assertEqual(
@@ -160,11 +202,173 @@ class PrecisionInvestigationContractTest(unittest.TestCase):
                 package_init.resolve(),
             )
 
+    def test_mode_aware_snapshot_records_pip_check_once(self):
+        collector = load_collector()
+        commands = []
+
+        def run_command(command):
+            command = tuple(command)
+            commands.append(command)
+            if command == (sys.executable, '-m', 'pip', 'check'):
+                return {
+                    'returncode': 1,
+                    'output': 'broken source-tree metadata\n',
+                }
+            return {'returncode': 0, 'output': ''}
+
+        with tempfile.TemporaryDirectory() as tmpdir, mock.patch.object(
+                collector, 'run_command', side_effect=run_command
+        ), mock.patch.object(
+                collector, 'capture_show_config', return_value={'output': ''}
+        ):
+            output_dir = Path(tmpdir)
+            collector.write_snapshot(output_dir, 'source-tree')
+            runtime = json.loads(
+                (output_dir / 'runtime.json').read_text(encoding='utf-8')
+            )
+
+            self.assertEqual(runtime['schema_version'], 2)
+            self.assertEqual(runtime['pip_check'], {
+                'mode': 'source-tree',
+                'command': [sys.executable, '-m', 'pip', 'check'],
+                'returncode': 1,
+                'error': None,
+                'output_file': 'pip-check.txt',
+            })
+            self.assertEqual(
+                (output_dir / 'pip-check.txt').read_text(encoding='utf-8'),
+                'broken source-tree metadata\n',
+            )
+            self.assertEqual(
+                commands.count((sys.executable, '-m', 'pip', 'check')), 1
+            )
+
+    def test_legacy_collect_keeps_schema_version_one(self):
+        collector = load_collector()
+        with tempfile.TemporaryDirectory() as tmpdir, mock.patch.object(
+                collector, 'run_command', return_value={
+                    'returncode': 0, 'output': ''
+                }
+        ), mock.patch.object(
+                collector, 'capture_show_config', return_value={'output': ''}
+        ):
+            runtime_path = Path(tmpdir) / 'runtime.json'
+            collector.collect(runtime_path)
+            runtime = json.loads(runtime_path.read_text(encoding='utf-8'))
+
+        self.assertEqual(runtime['schema_version'], 1)
+        self.assertNotIn('pip_check', runtime)
+
+    def test_source_tree_pip_check_is_advisory(self):
+        runner = load_runner()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            working_directory = Path(tmpdir)
+            package = working_directory / 'pyscf'
+            package.mkdir()
+            package_init = package / '__init__.py'
+            package_init.write_text('', encoding='utf-8')
+            runtime_path = write_runtime_snapshot(
+                working_directory / 'environment',
+                mode='source-tree',
+                returncode=1,
+                pyscf_path=package_init,
+            )
+
+            runtime = runner.validate_environment_snapshot(
+                runtime_path, 'source-tree', working_directory
+            )
+
+        self.assertEqual(runtime['pip_check']['returncode'], 1)
+
+    def test_installed_wheel_requires_clean_pip_check(self):
+        runner = load_runner()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            site_packages = Path(tmpdir) / 'venv' / 'Lib' / 'site-packages'
+            package = site_packages / 'pyscf'
+            package.mkdir(parents=True)
+            package_init = package / '__init__.py'
+            package_init.write_text('', encoding='utf-8')
+            runtime_path = write_runtime_snapshot(
+                site_packages / 'environment',
+                mode='installed-wheel',
+                returncode=1,
+                pyscf_path=package_init,
+            )
+
+            with self.assertRaisesRegex(RuntimeError, 'pip check'):
+                runner.validate_environment_snapshot(
+                    runtime_path, 'installed-wheel', site_packages
+                )
+
+            runtime_path = write_runtime_snapshot(
+                site_packages / 'environment',
+                mode='installed-wheel',
+                returncode=0,
+                pyscf_path=package_init,
+            )
+            runner.validate_environment_snapshot(
+                runtime_path, 'installed-wheel', site_packages
+            )
+
+    def test_environment_snapshot_rejects_mode_and_path_mismatch(self):
+        runner = load_runner()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            working_directory = Path(tmpdir)
+            package = working_directory / 'pyscf'
+            package.mkdir()
+            package_init = package / '__init__.py'
+            package_init.write_text('', encoding='utf-8')
+            runtime_path = write_runtime_snapshot(
+                working_directory / 'environment',
+                mode='installed-wheel',
+                returncode=0,
+                pyscf_path=package_init,
+            )
+
+            with self.assertRaisesRegex(RuntimeError, 'mode'):
+                runner.validate_environment_snapshot(
+                    runtime_path, 'source-tree', working_directory
+                )
+            with self.assertRaisesRegex(RuntimeError, 'site-packages'):
+                runner.validate_environment_snapshot(
+                    runtime_path, 'installed-wheel', working_directory
+                )
+
+    def test_environment_snapshot_rejects_pip_check_from_other_interpreter(self):
+        runner = load_runner()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            working_directory = Path(tmpdir)
+            package = working_directory / 'pyscf'
+            package.mkdir()
+            package_init = package / '__init__.py'
+            package_init.write_text('', encoding='utf-8')
+            runtime_path = write_runtime_snapshot(
+                working_directory / 'environment',
+                mode='source-tree',
+                returncode=0,
+                pyscf_path=package_init,
+            )
+            other_python = working_directory / 'other-python'
+            other_python.write_text('', encoding='utf-8')
+            runtime = json.loads(runtime_path.read_text(encoding='utf-8'))
+            runtime['pip_check']['command'][0] = str(other_python)
+            runtime_path.write_text(json.dumps(runtime), encoding='utf-8')
+
+            with self.assertRaisesRegex(RuntimeError, 'interpreter'):
+                runner.validate_environment_snapshot(
+                    runtime_path, 'source-tree', working_directory
+                )
+
     def test_failed_attempt_keeps_complete_evidence_and_exits_nonzero(self):
         runner = ROOT / '.github/workflows/run_precision_tests.py'
         collector = ROOT / '.github/workflows/collect_precision_environment.py'
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
+            package = root / 'pyscf'
+            package.mkdir()
+            (package / '__init__.py').write_text(
+                "__version__ = 'source-tree'\n", encoding='utf-8'
+            )
             (root / 'test_sample.py').write_text(
                 'def test_failure():\n    assert False\n', encoding='utf-8'
             )
@@ -196,6 +400,8 @@ class PrecisionInvestigationContractTest(unittest.TestCase):
                     str(root),
                     '--pytest-config',
                     str(config),
+                    '--environment-mode',
+                    'source-tree',
                     '--collector',
                     str(collector),
                 ],
