@@ -17,4 +17,5 @@ python "$repo_root/.github/workflows/run_precision_tests.py" \
   --working-directory "$repo_root" \
   --rootdir "$repo_root" \
   --pytest-config "$repo_root/pytest.ini" \
+  --environment-mode source-tree \
   --collector "$repo_root/.github/workflows/collect_precision_environment.py"

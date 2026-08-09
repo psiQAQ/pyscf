@@ -145,6 +145,7 @@ try {
                 --working-directory $sitePackages `
                 --rootdir $sitePackages `
                 --pytest-config $pytestConfig `
+                --environment-mode installed-wheel `
                 --collector (Join-Path $RepoRoot '.github\workflows\collect_precision_environment.py')
             $pytestExitCode = $LASTEXITCODE
         }
