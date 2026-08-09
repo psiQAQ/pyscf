@@ -161,10 +161,15 @@ def write_summary(output_dir, records):
 def collect_environment(collector, output_dir, working_directory, environment):
     environment_dir = output_dir / 'environment'
     command = [sys.executable, str(collector), '--snapshot-dir', str(environment_dir)]
+    collector_environment = environment.copy()
+    existing_pythonpath = collector_environment.get('PYTHONPATH')
+    collector_environment['PYTHONPATH'] = os.pathsep.join(
+        value for value in (str(working_directory), existing_pythonpath) if value
+    )
     result = subprocess.run(
         command,
         cwd=working_directory,
-        env=environment,
+        env=collector_environment,
         capture_output=True,
         text=True,
         check=False,

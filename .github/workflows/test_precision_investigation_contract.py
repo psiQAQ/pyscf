@@ -123,6 +123,43 @@ class PrecisionInvestigationContractTest(unittest.TestCase):
         self.assertNotIn('--deselect', runner)
         self.assertNotIn('retry', runner.lower())
 
+    def test_collector_imports_pyscf_from_working_directory(self):
+        runner = load_runner()
+        collector = ROOT / '.github/workflows/collect_precision_environment.py'
+        with tempfile.TemporaryDirectory() as tmpdir:
+            working_directory = Path(tmpdir)
+            package = working_directory / 'pyscf'
+            package.mkdir()
+            existing_pythonpath = working_directory / 'existing-pythonpath'
+            existing_pythonpath.mkdir()
+            (existing_pythonpath / '_precision_test_support.py').write_text(
+                "VERSION = 'source-tree'\n", encoding='utf-8'
+            )
+            package_init = package / '__init__.py'
+            package_init.write_text(
+                'from _precision_test_support import VERSION\n'
+                '__version__ = VERSION\n',
+                encoding='utf-8',
+            )
+            environment = runner.profile_environment('1', '1')
+            environment['PYTHONPATH'] = str(existing_pythonpath)
+
+            runtime_path = runner.collect_environment(
+                collector,
+                working_directory / 'evidence',
+                working_directory,
+                environment,
+            )
+
+            self.assertEqual(environment['PYTHONPATH'], str(existing_pythonpath))
+            runtime = json.loads(runtime_path.read_text(encoding='utf-8'))
+            self.assertNotIn('pyscf_import_error', runtime)
+            self.assertEqual(runtime['key_modules']['pyscf']['version'], 'source-tree')
+            self.assertEqual(
+                Path(runtime['key_modules']['pyscf']['path']).resolve(),
+                package_init.resolve(),
+            )
+
     def test_failed_attempt_keeps_complete_evidence_and_exits_nonzero(self):
         runner = ROOT / '.github/workflows/run_precision_tests.py'
         collector = ROOT / '.github/workflows/collect_precision_environment.py'
