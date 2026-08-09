@@ -85,7 +85,7 @@ def native_libraries(pyscf_module):
     if not module_path:
         return []
     libdir = Path(module_path).resolve().parent / 'lib'
-    linker = 'otool' if platform.system() == 'Darwin' else 'ldd'
+    linker = ('otool', '-L') if platform.system() == 'Darwin' else ('ldd',)
     libraries = []
     for path in sorted(libdir.glob('*')):
         if path.is_file() and path.suffix.lower() in ('.dll', '.dylib', '.so'):
@@ -93,7 +93,7 @@ def native_libraries(pyscf_module):
                 'path': str(path),
                 'size': path.stat().st_size,
                 'sha256': hash_file(path),
-                'linkage': run_command((linker, str(path))),
+                'linkage': run_command((*linker, str(path))),
             })
     return libraries
 
