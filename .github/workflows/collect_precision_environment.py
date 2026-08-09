@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """Collect reproducibility metadata for precision-test artifacts."""
 
+import argparse
 import contextlib
 import hashlib
 import importlib
@@ -26,6 +27,7 @@ TOOL_COMMANDS = (
     ('clang', '--version'), ('gcc', '--version'), ('make', '--version'),
     ('ldd', '--version'), ('sw_vers',),
 )
+ENVIRONMENT_MODES = ('source-tree', 'installed-wheel')
 
 
 def run_command(command):
@@ -110,13 +112,13 @@ def write_command_output(path, command):
     path.write_text(result.get('output', result.get('error', '')), encoding='utf-8')
 
 
-def collect(output_path):
+def collect(output_path, pip_check=None):
     numpy, numpy_error = optional_module('numpy')
     scipy, scipy_error = optional_module('scipy')
     h5py, h5py_error = optional_module('h5py')
     pyscf, pyscf_error = optional_module('pyscf')
     result = {
-        'schema_version': 1,
+        'schema_version': 2 if pip_check is not None else 1,
         'git_commit': run_command(('git', 'rev-parse', 'HEAD')),
         'python': {
             'version': sys.version,
@@ -148,6 +150,8 @@ def collect(output_path):
         'tools': {' '.join(command): run_command(command) for command in TOOL_COMMANDS},
         'native_libraries': native_libraries(pyscf) if pyscf else [],
     }
+    if pip_check is not None:
+        result['pip_check'] = pip_check
     if not pyscf:
         result['pyscf_import_error'] = pyscf_error
     else:
@@ -170,9 +174,21 @@ def collect(output_path):
     )
 
 
-def write_snapshot(output_dir):
+def write_snapshot(output_dir, mode):
     output_dir.mkdir(parents=True, exist_ok=True)
-    collect(output_dir / 'runtime.json')
+    pip_check_command = (sys.executable, '-m', 'pip', 'check')
+    pip_check_result = run_command(pip_check_command)
+    (output_dir / 'pip-check.txt').write_text(
+        pip_check_result.get('output', pip_check_result.get('error', '')),
+        encoding='utf-8',
+    )
+    collect(output_dir / 'runtime.json', pip_check={
+        'mode': mode,
+        'command': list(pip_check_command),
+        'returncode': pip_check_result.get('returncode'),
+        'error': pip_check_result.get('error'),
+        'output_file': 'pip-check.txt',
+    })
     write_command_output(
         output_dir / 'pip-freeze.txt',
         (sys.executable, '-m', 'pip', 'freeze', '--all'),
@@ -181,18 +197,24 @@ def write_snapshot(output_dir):
         output_dir / 'pip-list.json',
         (sys.executable, '-m', 'pip', 'list', '--format=json'),
     )
-    write_command_output(
-        output_dir / 'pip-check.txt',
-        (sys.executable, '-m', 'pip', 'check'),
-    )
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--snapshot-dir', action='store_true')
+    parser.add_argument('--mode', choices=ENVIRONMENT_MODES)
+    parser.add_argument('path', type=Path)
+    args = parser.parse_args()
+    if args.snapshot_dir and args.mode is None:
+        parser.error('--mode is required with --snapshot-dir')
+    if not args.snapshot_dir and args.mode is not None:
+        parser.error('--mode requires --snapshot-dir')
+    return args
 
 
 if __name__ == '__main__':
-    if len(sys.argv) == 3 and sys.argv[1] == '--snapshot-dir':
-        write_snapshot(Path(sys.argv[2]))
-    elif len(sys.argv) == 2:
-        collect(Path(sys.argv[1]))
+    args = parse_args()
+    if args.snapshot_dir:
+        write_snapshot(args.path, args.mode)
     else:
-        raise SystemExit(
-            'Usage: collect_precision_environment.py [--snapshot-dir] PATH'
-        )
+        collect(args.path)

@@ -19,6 +19,10 @@ PROFILES = {
     '1/4': ('1', '4', 'omp1-blas4'),
     '4/4': ('4', '4', 'omp4-blas4'),
 }
+ENVIRONMENT_MODES = ('source-tree', 'installed-wheel')
+PIP_CHECK_FIELDS = {
+    'mode', 'command', 'returncode', 'error', 'output_file',
+}
 RECORD_FIELDS = (
     'tested_sha',
     'nodeid',
@@ -80,6 +84,7 @@ def parse_args():
         type=Path,
         default=Path(__file__).with_name('collect_precision_environment.py'),
     )
+    parser.add_argument('--environment-mode', choices=ENVIRONMENT_MODES)
     parser.add_argument('--validate-only', action='store_true')
     return parser.parse_args()
 
@@ -158,9 +163,90 @@ def write_summary(output_dir, records):
     (output_dir / 'summary.md').write_text('\n'.join(lines) + '\n', encoding='utf-8')
 
 
-def collect_environment(collector, output_dir, working_directory, environment):
+def validate_environment_snapshot(
+        runtime_path, environment_mode, working_directory):
+    try:
+        runtime = json.loads(runtime_path.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError) as error:
+        raise RuntimeError(f'Invalid environment snapshot: {error}') from error
+    if runtime.get('schema_version') != 2:
+        raise RuntimeError('Environment snapshot must use schema version 2')
+    pip_check = runtime.get('pip_check')
+    if not isinstance(pip_check, dict) or set(pip_check) != PIP_CHECK_FIELDS:
+        raise RuntimeError('Environment snapshot has an invalid pip check record')
+    if pip_check['mode'] != environment_mode:
+        raise RuntimeError(
+            f'Environment mode mismatch: expected {environment_mode!r}, '
+            f'got {pip_check["mode"]!r}'
+        )
+    command = pip_check['command']
+    if (
+            not isinstance(command, list)
+            or len(command) != 4
+            or not isinstance(command[0], str)
+            or not command[0]
+            or command[1:] != ['-m', 'pip', 'check']):
+        raise RuntimeError('Environment snapshot has an invalid pip check command')
+    runtime_python = runtime.get('python', {}).get('executable')
+    if not isinstance(runtime_python, str) or not runtime_python:
+        raise RuntimeError('Environment snapshot has an invalid Python interpreter')
+    command_python = os.path.normcase(str(Path(command[0]).resolve()))
+    runtime_python = os.path.normcase(str(Path(runtime_python).resolve()))
+    if command_python != runtime_python:
+        raise RuntimeError(
+            'pip check interpreter does not match the runtime Python interpreter'
+        )
+    if pip_check['error'] is not None:
+        raise RuntimeError(f'pip check capture failed: {pip_check["error"]}')
+    returncode = pip_check['returncode']
+    if isinstance(returncode, bool) or not isinstance(returncode, int):
+        raise RuntimeError('pip check did not record an integer return code')
+    if environment_mode == 'installed-wheel' and returncode != 0:
+        raise RuntimeError(f'Installed-wheel pip check failed with code {returncode}')
+    if pip_check['output_file'] != 'pip-check.txt':
+        raise RuntimeError('Environment snapshot has an invalid pip check output file')
+    if not runtime_path.with_name(pip_check['output_file']).is_file():
+        raise RuntimeError('Environment snapshot is missing pip-check.txt')
+
+    pyscf_path_value = (
+        runtime.get('key_modules', {}).get('pyscf', {}).get('path')
+    )
+    if not pyscf_path_value:
+        raise RuntimeError('Environment snapshot is missing the PySCF path')
+    pyscf_path = Path(pyscf_path_value).resolve()
+    working_directory = Path(working_directory).resolve()
+    within_working_directory = (
+        pyscf_path == working_directory
+        or working_directory in pyscf_path.parents
+    )
+    from_site_packages = any(
+        part.lower() == 'site-packages' for part in pyscf_path.parts
+    )
+    if environment_mode == 'source-tree':
+        if not within_working_directory or from_site_packages:
+            raise RuntimeError(
+                'source-tree PySCF path must come from the working directory'
+            )
+    elif not within_working_directory or not from_site_packages:
+        raise RuntimeError(
+            'installed-wheel PySCF path must come from site-packages'
+        )
+    return runtime
+
+
+def collect_environment(
+        collector, output_dir, working_directory, environment,
+        environment_mode):
     environment_dir = output_dir / 'environment'
-    command = [sys.executable, str(collector), '--snapshot-dir', str(environment_dir)]
+    environment_dir.mkdir(parents=True, exist_ok=True)
+    command = [
+        sys.executable,
+        str(collector),
+        '--snapshot-dir',
+        str(environment_dir),
+        '--mode',
+        environment_mode,
+    ]
     collector_environment = environment.copy()
     existing_pythonpath = collector_environment.get('PYTHONPATH')
     collector_environment['PYTHONPATH'] = os.pathsep.join(
@@ -182,7 +268,11 @@ def collect_environment(collector, output_dir, working_directory, environment):
             f'Environment capture failed with code {result.returncode}; '
             f'inspect {environment_dir / "collector.log"}'
         )
-    return environment_dir / 'runtime.json'
+    runtime_path = environment_dir / 'runtime.json'
+    validate_environment_snapshot(
+        runtime_path, environment_mode, working_directory
+    )
+    return runtime_path
 
 
 def main():
@@ -207,6 +297,8 @@ def main():
             'tested_sha': tested_sha,
         }, indent=2))
         return
+    if args.environment_mode is None:
+        raise SystemExit('--environment-mode is required unless --validate-only is used')
     if args.output_dir is None:
         raise SystemExit('--output-dir is required unless --validate-only is used')
 
@@ -219,7 +311,11 @@ def main():
     environment['PRECISION_TESTED_SHA'] = tested_sha
     try:
         environment_path = collect_environment(
-            collector, output_dir, working_directory, environment
+            collector,
+            output_dir,
+            working_directory,
+            environment,
+            args.environment_mode,
         )
     except RuntimeError as error:
         raise SystemExit(str(error)) from error
