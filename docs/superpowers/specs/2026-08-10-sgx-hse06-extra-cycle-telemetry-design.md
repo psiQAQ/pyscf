@@ -3,7 +3,7 @@
 ## 状态
 
 - 对话设计：已批准。
-- 本文档：等待用户复核。
+- 本文档：用户已于 2026-08-10 批准。
 - 实现、推送和远端诊断 CI：尚未开始。
 
 ## 背景
@@ -182,14 +182,14 @@ marker 只包含 scalar 和已有计算结果，避免复制 density/Fock/`veff`
 4. source-tree `repeats=1` smoke：一个 record、一个 pass、一个合法 marker。
 5. Windows installed-wheel `repeats=1` smoke：从隔离 venv/site-packages 导入 wheel，运行时 LibXC 7.1.2，marker 与原 assertion 均有效。
 
-静态源码字符串、AST method-body 检查、YAML 文本匹配和新 validator 均不属于本次范围。
+静态源码字符串、AST method-body 检查、YAML 文本匹配和提交到被测分支的新 validator 均不属于本次范围。为严格执行下述 artifact 验收，可在 `.agents/active/` 使用本地忽略、仅依赖标准库的审计 helper；它不得进入调查分支、implementation commit 或后续 PR。
 
 ## 远端执行与验收
 
 Stage 1 dispatch：
 
 ```text
-platform=windows
+platform=windows-latest
 python_version=3.12
 profile=4/1
 repeats=200
