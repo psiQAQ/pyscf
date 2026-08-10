@@ -180,7 +180,8 @@ class KnownValues(unittest.TestCase):
         self._check_finite_diff_grad(ALL_SETTINGS[1], ALL_PRECISIONS[1], "HSE06")
         self._check_finite_diff_grad(ALL_SETTINGS[1], ALL_PRECISIONS[1], "WB97X")
         self._check_finite_diff_grad(ALL_SETTINGS[2], ALL_PRECISIONS[2], "PBE0")
-        self._check_finite_diff_grad(ALL_SETTINGS[2], ALL_PRECISIONS[2], "HSE06")
+        self._check_finite_diff_grad(
+            ALL_SETTINGS[2], ALL_PRECISIONS[2], "HSE06", telemetry=True)
         self._check_finite_diff_grad(ALL_SETTINGS[2], ALL_PRECISIONS[2], "WB97X")
 
 

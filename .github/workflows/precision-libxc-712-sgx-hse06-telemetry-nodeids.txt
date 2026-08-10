@@ -1,1 +1,1 @@
-pyscf/sgx/grad/test/test_rks.py::KnownValues::test_finite_diff_grad_settings2_hse06_telemetry
+pyscf/sgx/grad/test/test_rks.py::KnownValues::test_finite_diff_grad
