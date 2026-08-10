@@ -1,7 +1,11 @@
 from pyscf.sgx.sgx import sgx_fit
 from pyscf import gto, scf, lib
+import json
 import numpy
 import unittest
+
+
+TELEMETRY_PREFIX = 'PYSCF_SGX_HSE06_TELEMETRY_V1 '
 
 
 ALL_SETTINGS = [
@@ -54,26 +58,119 @@ def tearDownModule():
 
 class KnownValues(unittest.TestCase):
 
-    def _check_finite_diff_grad(self, df_settings, order, xc):
+    def _check_finite_diff_grad(
+            self, df_settings, order, xc, *, telemetry=False):
         mf = sgx_fit(scf.RKS(mol).set(xc=xc))
         _set_df_args(mf, *df_settings)
-        g = mf.nuc_grad_method().set(sgx_grid_response=True, grid_response=True).kernel()
+        phase = 'base'
+        main_cycles = {}
+        post = {}
+        if telemetry:
+            def snapshot_main_cycle(envs):
+                main_cycles[phase] = {
+                    'cycle': int(envs['cycle']) + 1,
+                    'e_tot': float(envs['e_tot']),
+                    'last_hf_e': float(envs['last_hf_e']),
+                    'delta_e': float(envs['e_tot'] - envs['last_hf_e']),
+                    'norm_gorb': float(envs['norm_gorb']),
+                    'norm_ddm': float(envs['norm_ddm']),
+                    'scf_conv': bool(envs['scf_conv']),
+                    'conv_tol': float(envs['conv_tol']),
+                    'conv_tol_grad': float(envs['conv_tol_grad']),
+                    'conv_check': bool(envs['conv_check']),
+                }
+            mf.callback = snapshot_main_cycle
+
+        g = mf.nuc_grad_method().set(
+            sgx_grid_response=True, grid_response=True).kernel()
+        if telemetry:
+            post['base'] = (float(mf.e_tot), bool(mf.converged))
         mol1 = mol.copy()
         mf_scanner = mf.as_scanner()
         delta = 1e-4
+        if telemetry:
+            phase = 'plus'
         e1 = mf_scanner(mol1.set_geom_(
             f'O  0. 0. {delta:f}; 1  0. -0.757 0.587; 1  0. 0.757 0.587'
         ))
+        if telemetry:
+            post['plus'] = (float(e1), bool(mf_scanner.converged))
+            phase = 'minus'
         e2 = mf_scanner(mol1.set_geom_(
             f'O  0. 0. -{delta:f}; 1  0. -0.757 0.587; 1  0. 0.757 0.587'
         ))
+        if telemetry:
+            post['minus'] = (float(e2), bool(mf_scanner.converged))
+            phases = {}
+            for name in ('base', 'plus', 'minus'):
+                main = main_cycles[name]
+                post_energy, post_converged = post[name]
+                extra_executed = main['scf_conv'] and main['conv_check']
+                phases[name] = {
+                    'main': main,
+                    'post_energy': post_energy,
+                    'post_converged': post_converged,
+                    'extra_executed': extra_executed,
+                    'extra_shift': (
+                        post_energy - main['e_tot']
+                        if extra_executed else None),
+                }
+
+            analytic_gradient = float(g[0,2])
+            translation_l1 = float(numpy.abs(g.sum(axis=0)).sum())
+            plus_main = main_cycles['plus']['e_tot']
+            minus_main = main_cycles['minus']['e_tot']
+            fd_pre = (plus_main - minus_main) / (2 * delta) * lib.param.BOHR
+            fd_post = (e1 - e2) / (2 * delta) * lib.param.BOHR
+            error_pre = analytic_gradient - fd_pre
+            error_post = analytic_gradient - fd_post
+            extra_contribution = fd_post - fd_pre
+            closure_residual = error_post - (
+                error_pre - extra_contribution)
+            translation_pass = bool(round(abs(translation_l1), 12) == 0)
+            pre_pass = bool(round(abs(error_pre), 6) == 0)
+            post_pass = bool(round(abs(error_post), 6) == 0)
+            payload = {
+                'schema_version': 1,
+                'case': {
+                    'settings_index': 2,
+                    'settings': [True, True, True, True, True],
+                    'precision': 6,
+                    'xc': 'HSE06',
+                    'delta': 1e-4,
+                    'translation_places': 12,
+                    'finite_difference_places': 6,
+                },
+                'units': {
+                    'energy': 'Hartree',
+                    'gradient': 'Hartree/Bohr',
+                    'displacement': 'Angstrom',
+                },
+                'phases': phases,
+                'result': {
+                    'analytic_gradient': analytic_gradient,
+                    'translation_l1': translation_l1,
+                    'translation_assertion_pass': translation_pass,
+                    'finite_difference_pre': fd_pre,
+                    'finite_difference_post': fd_post,
+                    'gradient_error_pre': error_pre,
+                    'gradient_error_post': error_post,
+                    'finite_difference_pre_pass': pre_pass,
+                    'finite_difference_post_pass': post_pass,
+                    'extra_contribution': extra_contribution,
+                    'closure_residual': closure_residual,
+                },
+            }
+            print(TELEMETRY_PREFIX + json.dumps(
+                payload, sort_keys=True, separators=(',', ':'),
+                allow_nan=False), flush=True)
         # Allow round-off from thread-dependent reductions while still bounding translational noise.
         self.assertAlmostEqual(numpy.abs(g.sum(axis=0)).sum(), 0, 12)
         self.assertAlmostEqual(g[0,2], (e1-e2)/(2*delta)*lib.param.BOHR, order)
 
     def test_finite_diff_grad_settings2_hse06_telemetry(self):
         self._check_finite_diff_grad(
-            ALL_SETTINGS[2], ALL_PRECISIONS[2], 'HSE06')
+            ALL_SETTINGS[2], ALL_PRECISIONS[2], 'HSE06', telemetry=True)
 
     def test_finite_diff_grad(self):
         self._check_finite_diff_grad(ALL_SETTINGS[0], ALL_PRECISIONS[0], "PBE0")
