@@ -6,6 +6,8 @@
 
 **Architecture:** 原数值路径和两条 `assertAlmostEqual` 保持不变。新增 diagnostic nodeid 显式启用 callback，在 assertion 前输出一行 schema-v1 JSON。仓库中不新增 workflow、parser 或 production code；一个本地忽略、标准库-only validator 统一验收 source、remote witness 和 formal artifact。
 
+> **Execution-plan correction (2026-08-10):** 目标 native automation `libxc-3-pbc-hse06-sgx-finite-difference-hse06-pbc-hse` 已核为 `PAUSED`，当前 thread 的 ACTIVE native heartbeat 数为 `0`，且没有可调用的 `automation_update`。Task 4.5 与 Task 5 因而使用用户已授权、已审查的唯一 PS1 fallback；不得启动第二个 PS1、`gh run watch`、manual loop 或其他 automation。此修订只改变 CI 等待编排，不改变 frozen implementation HEAD `2cd242eec13d0f4a80059738540ea14418b94abd`、validator SHA-256 `38088856545baf89e8ab9c054b943d96272359a42bfd582501184260ccb3c8b2`、三个 implementation commits 或科学实验。
+
 ## Fixed constraints
 
 - Approved base: `37fc114e1c0519ea83197e81826afaa62d2aac89`。
@@ -20,7 +22,7 @@
 - Assertion remains the only scientific pass/fail gate. Valid scientific failure is not an invalid pipeline。
 - Exactly three implementation commits, all ending `[skip ci]`; no PR and no full matrix。
 - This plan ends after Stage 1. A valid, converged `0/200` produces `NOT_REPRODUCED/HOLD`, then a separate Stage 2 plan; it is never called PASS/FIXED。
-- CI wait uses exactly one monitor: prefer a callable Codex heartbeat; when that interface is absent, use the user-authorized audited PS1 fallback specified below。Witness interval is 15 minutes, formal interval is 30 minutes; Goal is paused while waiting and resumed after terminal state。
+- CI wait uses exactly one audited PS1 heartbeat process。Witness and formal intervals are both 1,800 seconds；witness timeout wake is disabled and formal review wake is 300 minutes。The script acquires its mutex before pausing Goal, checks only the recorded run/head, restores Goal `active` on terminal/diagnostic/timeout, and exits；no native ACTIVE heartbeat or second poller may coexist。
 
 ---
 
@@ -874,69 +876,92 @@ if ((Get-FileHash $ArchivedValidator).Hash.ToLowerInvariant() -ne $V.validator_s
 
 Use `apply_patch` to write exact keys `stage1_head: $Head`, `stage1_validator_sha256: $V.validator_sha256`, `stage1_source_verdict: $V.verdict`, counts, first finding, and report path into `$ActiveDoc`。If verdict is not `SMOKE_PASS`, retain evidence and stop cleanly before Task 5; do not call it a pipeline error or rerun it。The validator remains local/ignored and is never staged. Every later shell must compare the current validator, local/remote head, and prior witness verdict against these frozen keys。
 
-- [ ] **4.5 Prepare the user-authorized PS1 heartbeat fallback**
+- [ ] **4.5 Validate the paused native automation and audited PS1 fallback**
 
-Search callable tools for `automation_update` once at execution and record the result. The current 2026-08-10 root inventory does not expose it, so this plan's executable route is the user-authorized PS1/background fallback。If a future executor wants to switch back to a newly available native heartbeat, amend/review this plan first rather than improvising two schedulers。
-
-Before using PS1, open Codex Scheduled Tasks and delete/pause the stale automation id `libxc-3-pbc-hse06-sgx-finite-difference-hse06-pbc-hse`; verify no active app heartbeat remains for this task. If that cannot be verified, stop before remote dispatch rather than double-poll。
-
-Modify local-only audited script `D:\workspace\pyscf\.agents\active\libxc-712-ci-heartbeat.ps1` with `apply_patch`; preserve its old defaults and Goal identity logic, and add:
+Do not modify TOML/SQLite or launch the fallback yet。In a fresh shell, require the exact target automation to remain `PAUSED`, require zero ACTIVE heartbeat automations for the current thread, and verify the reviewed PS1 bytes/self-test/AST plus zero local pollers:
 
 ```powershell
-param(
-  [switch]$CheckOnce,
-  [switch]$NoResume,
-  [ValidateSet('active', 'paused')]
-  [string]$SetGoalStatus,
-  [switch]$SelfTest,
-  [long[]]$TargetRunIds,
-  [ValidatePattern('^[0-9a-f]{40}$')][string]$TargetHeadSha,
-  [ValidateRange(60,3600)][int]$IntervalSeconds = 1800,
-  [ValidateRange(0,360)][int]$WakeAfterMinutes = 0
-)
-```
-
-Keep the existing `-NoResume`/`-SetGoalStatus` incompatibility guard, then add this fail-closed target contract before any Goal mutation or GitHub read:
-
-```powershell
-$HasTargetRuns = $PSBoundParameters.ContainsKey('TargetRunIds')
-$HasTargetHead = $PSBoundParameters.ContainsKey('TargetHeadSha')
-if ($HasTargetRuns -xor $HasTargetHead) {
-  throw '-TargetRunIds and -TargetHeadSha must be supplied together'
+$AutomationId = 'libxc-3-pbc-hse06-sgx-finite-difference-hse06-pbc-hse'
+$ThreadId = '019f64bd-77a5-7573-88e9-fd80b1882e70'
+$AutomationRoot = 'C:\Users\ustcw\.codex\automations'
+$AutomationPath = "C:\Users\ustcw\.codex\automations\$AutomationId\automation.toml"
+$ActiveDoc = 'D:\workspace\pyscf\.agents\active\libxc-712-release-revalidation.md'
+$GoalBridge = 'D:\workspace\pyscf\.agents\active\libxc-712-ci-heartbeat.ps1'
+$ExpectedGoalBridgeSha = '4198340e5e56caa9a103f37a133bd9cb5ab37d839771f5aae832c280b0e2f639'
+function Get-ExactTomlString {
+  param([string]$Text, [string]$Key, [switch]$Required)
+  $Pattern = '(?m)^' + [regex]::Escape($Key) + '\s*=\s*"([^"]*)"\s*$'
+  $Found = [regex]::Matches($Text, $Pattern)
+  if ($Found.Count -gt 1 -or ($Required -and $Found.Count -ne 1)) { throw "Expected one TOML key: $Key" }
+  if ($Found.Count -eq 0) { return $null }
+  return $Found[0].Groups[1].Value
 }
-if ($HasTargetRuns -and (
-    $TargetRunIds.Count -eq 0 -or
-    @($TargetRunIds | Where-Object { $_ -le 0 }).Count -ne 0 -or
-    @($TargetRunIds | Select-Object -Unique).Count -ne $TargetRunIds.Count)) {
-  throw '-TargetRunIds must contain unique positive IDs'
+$AutomationFiles = @(Get-ChildItem -LiteralPath $AutomationRoot -Filter automation.toml -File -Recurse -ErrorAction Stop)
+$CurrentThreadActiveHeartbeats = @($AutomationFiles | ForEach-Object {
+  $CandidateText = [IO.File]::ReadAllText($_.FullName, (New-Object Text.UTF8Encoding($false)))
+  $CandidateKind = Get-ExactTomlString -Text $CandidateText -Key kind
+  $CandidateStatus = Get-ExactTomlString -Text $CandidateText -Key status
+  $CandidateThread = Get-ExactTomlString -Text $CandidateText -Key target_thread_id
+  if ($CandidateKind -ceq 'heartbeat' -and $CandidateStatus -ceq 'ACTIVE' -and $CandidateThread -ceq $ThreadId) {
+    [pscustomobject]@{ Path = $_.FullName; Text = $CandidateText; Id = (Get-ExactTomlString -Text $CandidateText -Key id -Required) }
+  }
+})
+if ($CurrentThreadActiveHeartbeats.Count -ne 0) { throw 'Current thread must have zero ACTIVE heartbeat automations' }
+if (-not (Test-Path -LiteralPath $AutomationPath -PathType Leaf)) { throw 'Target automation metadata missing' }
+$Toml = [IO.File]::ReadAllText($AutomationPath, (New-Object Text.UTF8Encoding($false)))
+$ExpectedAutomation = [ordered]@{
+  id = $AutomationId
+  status = 'PAUSED'
+  kind = 'heartbeat'
+  target_thread_id = $ThreadId
+  rrule = 'RRULE:FREQ=MINUTELY;INTERVAL=30'
+  prompt = '检查CI状态'
 }
-if ($SelfTest -and ($CheckOnce -or $NoResume -or
-    $PSBoundParameters.ContainsKey('SetGoalStatus') -or $HasTargetRuns)) {
-  throw '-SelfTest cannot be combined with runtime or Goal parameters'
+foreach ($Key in $ExpectedAutomation.Keys) {
+  $ActualValue = Get-ExactTomlString -Text $Toml -Key $Key -Required
+  if ($ActualValue -cne $ExpectedAutomation[$Key]) {
+    throw "Native heartbeat $Key mismatch: $ActualValue"
+  }
 }
-```
-
-When the paired target values are supplied, map them to existing `$RunIds/$ExpectedHeadSha/$CheckIntervalSeconds`; otherwise preserve the seven-run legacy defaults。Extend `gh run view --json` with `jobs` and add pure `Get-WakeReason(states, nowUtc, wakeAfterMinutes)`:
-
-- completed runs never trigger timeout。
-- queued/waiting or zero-job state continues waiting and never casts/cancels null `startedAt`。
-- `wakeAfterMinutes == 0` disables timeout wake completely；an in-progress run continues waiting until terminal。
-- only one `in_progress` job with non-null `startedAt` may be timed。
-- only when `wakeAfterMinutes > 0`, elapsed below threshold continues waiting and elapsed at/above threshold returns `timeout:<run-id>`。
-- unexpected job count or in-progress without `startedAt` returns a diagnostic wake reason, never a cancel。
-
-When a wake reason exists, log it, use the already-reviewed exact Goal read/set reconciliation to set Goal active, and exit; the background script never cancels GitHub itself。`--SelfTest` uses synthetic states for completed, queued/no-job, in-progress with a non-null `startedAt` and zero threshold, in-progress below/at a positive threshold, missing startedAt, and multiple jobs。The zero-threshold case must return no wake reason。Run:
-
-```powershell
-$Heartbeat = 'D:\workspace\pyscf\.agents\active\libxc-712-ci-heartbeat.ps1'
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Heartbeat -SelfTest
-if ($LASTEXITCODE -ne 0) { throw 'Heartbeat self-test failed' }
-$Tokens = $null; $Errors = $null
-[Management.Automation.Language.Parser]::ParseFile($Heartbeat, [ref]$Tokens, [ref]$Errors) | Out-Null
+if ((Get-FileHash -Algorithm SHA256 $GoalBridge).Hash.ToLowerInvariant() -ne $ExpectedGoalBridgeSha) {
+  throw 'Reviewed App Server one-shot drifted'
+}
+$Tokens = $null
+$Errors = $null
+[Management.Automation.Language.Parser]::ParseFile($GoalBridge, [ref]$Tokens, [ref]$Errors) | Out-Null
 if ($Errors.Count) { throw ($Errors | Out-String) }
+$SelfTestOutput = @(& 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' -NoProfile -ExecutionPolicy Bypass -File $GoalBridge -SelfTest)
+if ($LASTEXITCODE -ne 0 -or ($SelfTestOutput -join "`n") -notmatch 'Heartbeat self-test passed \(18 cases\)\.') {
+  throw 'Heartbeat 18-case self-test failed'
+}
+$Processes = @(Get-CimInstance Win32_Process -ErrorAction Stop)
+$LocalPollers = @($Processes | Where-Object {
+  if ($_.ProcessId -eq $PID -or [string]::IsNullOrWhiteSpace([string]$_.CommandLine)) {
+    $false
+  }
+  else {
+    $CommandLine = [string]$_.CommandLine
+    $IsPsHeartbeat = $CommandLine.IndexOf($GoalBridge, [StringComparison]::OrdinalIgnoreCase) -ge 0
+    $IsGhWatch = $CommandLine -match '(?i)gh(?:\.exe)?(?:"|\s)+run\s+watch(?:\s|$)'
+    $IsGhSleepLoop = $CommandLine -match '(?i)gh(?:\.exe)?(?:"|\s)+run\s+(?:view|list)(?:\s|$)' -and
+      $CommandLine -match '(?i)(?:Start-Sleep|sleep\.exe|while\s*\()'
+    $IsPsHeartbeat -or $IsGhWatch -or $IsGhSleepLoop
+  }
+})
+if ($LocalPollers.Count) {
+  $Evidence = $LocalPollers | Select-Object ProcessId, ExecutablePath, CommandLine | Format-List | Out-String
+  throw "Local CI poller survivor detected:`n$Evidence"
+}
 ```
 
-Request an independent read-only review of the modified local script before dispatch。Do not stage it. Actual launch commands are fully specified in Task 5。
+Use `apply_patch` to replace the stale monitor/state-machine text in `$ActiveDoc` with this exact fallback contract before push:
+
+- Native automation id `libxc-3-pbc-hse06-sgx-finite-difference-hse06-pbc-hse` remains `PAUSED` for thread `019f64bd-77a5-7573-88e9-fd80b1882e70`; current-thread ACTIVE heartbeat count remains `0`。Never edit scheduler storage。
+- At most one process may execute `$GoalBridge` in loop mode。It must receive one exact run id, literal head `2cd242eec13d0f4a80059738540ea14418b94abd`, interval `1800`, and wake gate `0` (witness) or `300` (formal)。Its mutex is the single-instance authority。
+- The loop itself pauses Goal only after it owns the mutex；queued or zero-job state keeps waiting；terminal, identity/job diagnostic, or formal timeout review restores Goal `active` and exits。It never cancels GitHub。
+- `$ActiveDoc` records `monitor_kind: ps1`, PID, executable, full command line, exact run/head/interval/wake gate, launch timestamp, expected artifact, validator SHA, and terminal next command。Task 5.3/5.5 accepts evidence only after the recorded PID has exited or no longer exists and the audited one-shot has reconciled Goal to `active` with an exact readback；this is a setter-plus-readback gate, not independent proof that the loop restored Goal。
+
+If PAUSED native metadata, ACTIVE-count-zero, local-poller inventory, GoalBridge SHA, 18-case self-test, or AST check fails, stop before push/dispatch。Do not start a second monitor or change Goal in Task 4.5。
 
 ---
 
@@ -944,7 +969,7 @@ Request an independent read-only review of the modified local script before disp
 
 **Files:**
 - Update locally only `D:\workspace\pyscf\.agents\active\libxc-712-release-revalidation.md`
-- Archive under `D:\workspace\pyscf\.agents\archive\precision-ci\experiments\<run-id>-sgx-hse06-telemetry-*`
+- Archive witness under `$ArchiveRoot\$RunId-sgx-hse06-telemetry-stage1-witness-windows-py312` and formal evidence under `$ArchiveRoot\$RunId-sgx-hse06-telemetry-stage1-windows-py312`。
 
 - [ ] **5.1 Re-establish context, verify, and push**
 
@@ -954,19 +979,24 @@ $Validator = 'D:\workspace\pyscf\.agents\active\precision-ci\scripts\validate_sg
 $ActiveDoc = 'D:\workspace\pyscf\.agents\active\libxc-712-release-revalidation.md'
 $ArchiveRoot = 'D:\workspace\pyscf\.agents\archive\precision-ci\experiments'
 $Base = '37fc114e1c0519ea83197e81826afaa62d2aac89'
+$ExpectedHead = '2cd242eec13d0f4a80059738540ea14418b94abd'
+$ExpectedValidatorSha = '38088856545baf89e8ab9c054b943d96272359a42bfd582501184260ccb3c8b2'
 $Branch = 'codex/investigate/libxc-712-sgx-extra-cycle-telemetry'
 $Selection = '.github/workflows/precision-libxc-712-sgx-hse06-telemetry-nodeids.txt'
 $NodeId = 'pyscf/sgx/grad/test/test_rks.py::KnownValues::test_finite_diff_grad_settings2_hse06_telemetry'
 Set-Location $Wt
 $Head = (git rev-parse HEAD).Trim()
 $State = Get-Content -Raw -Encoding utf8 $ActiveDoc
-if ($State -notmatch 'stage1_head:\s*([0-9a-f]{40})') { throw 'Missing frozen Stage 1 head' }
+if ($State -notmatch 'stage1_head:\s*`?([0-9a-f]{40})`?') { throw 'Missing frozen Stage 1 head' }
 $FrozenHead = $Matches[1]
-if ($State -notmatch 'stage1_validator_sha256:\s*([0-9a-f]{64})') { throw 'Missing frozen validator SHA' }
+if ($State -notmatch 'stage1_validator_sha256:\s*`?([0-9a-f]{64})`?') { throw 'Missing frozen validator SHA' }
 $FrozenValidatorSha = $Matches[1]
 if ($State -notmatch 'stage1_source_verdict:\s*SMOKE_PASS') { throw 'Source evidence did not pass its gate' }
 $CurrentValidatorSha = (Get-FileHash -Algorithm SHA256 $Validator).Hash.ToLowerInvariant()
-if ($Head -ne $FrozenHead -or $CurrentValidatorSha -ne $FrozenValidatorSha) { throw 'Head or validator drifted after source validation' }
+if ($Head -ne $ExpectedHead -or $FrozenHead -ne $ExpectedHead -or
+    $CurrentValidatorSha -ne $ExpectedValidatorSha -or $FrozenValidatorSha -ne $ExpectedValidatorSha) {
+  throw 'Hard-coded head, active doc, local head, or validator drifted after source validation'
+}
 
 conda run --no-capture-output -n pyscf-win313-test python $Validator --self-test
 if ($LASTEXITCODE -ne 0) { throw 'Validator self-test failed' }
@@ -974,7 +1004,7 @@ conda run --no-capture-output -n pyscf-win313-test python -m pytest `
   -q -p no:cacheprovider -c pytest.ini --rootdir . `
   .github/workflows/test_precision_investigation_contract.py
 if ($LASTEXITCODE -ne 0) { throw 'Precision contract failed' }
-git diff --check "$Base...$Head"
+git -c core.whitespace=cr-at-eol diff --check "$Base...$Head"
 if ($LASTEXITCODE -ne 0) { throw 'Diff check failed' }
 $Expected = @('.github/workflows/precision-libxc-712-sgx-hse06-telemetry-nodeids.txt', '.github/workflows/test_precision_investigation_contract.py', 'pyscf/sgx/grad/test/test_rks.py')
 $Actual = @(git diff --name-only "$Base...$Head")
@@ -987,12 +1017,71 @@ if ($LASTEXITCODE -ne 0) { throw 'GitHub authentication failed' }
 git push --set-upstream origin "HEAD:refs/heads/$Branch"
 if ($LASTEXITCODE -ne 0) { throw 'Push failed' }
 $Remote = ((git ls-remote origin "refs/heads/$Branch") -split '\s+')[0]
-if ($Remote -ne $Head) { throw 'Remote SHA mismatch' }
+if ($Remote -ne $ExpectedHead -or $Remote -ne $Head) { throw 'Remote SHA mismatch' }
 ```
 
 - [ ] **5.2 Dispatch and identify the 1-repeat witness**
 
 ```powershell
+$Wt = 'D:\workspace\pyscf\.worktrees\libxc-712-sgx-extra-cycle-telemetry'
+$Validator = 'D:\workspace\pyscf\.agents\active\precision-ci\scripts\validate_sgx_hse06_telemetry.py'
+$ActiveDoc = 'D:\workspace\pyscf\.agents\active\libxc-712-release-revalidation.md'
+$GoalBridge = 'D:\workspace\pyscf\.agents\active\libxc-712-ci-heartbeat.ps1'
+$Branch = 'codex/investigate/libxc-712-sgx-extra-cycle-telemetry'
+$Selection = '.github/workflows/precision-libxc-712-sgx-hse06-telemetry-nodeids.txt'
+$ExpectedHead = '2cd242eec13d0f4a80059738540ea14418b94abd'
+$ExpectedValidatorSha = '38088856545baf89e8ab9c054b943d96272359a42bfd582501184260ccb3c8b2'
+$ExpectedGoalBridgeSha = '4198340e5e56caa9a103f37a133bd9cb5ab37d839771f5aae832c280b0e2f639'
+$AutomationId = 'libxc-3-pbc-hse06-sgx-finite-difference-hse06-pbc-hse'
+$ThreadId = '019f64bd-77a5-7573-88e9-fd80b1882e70'
+$AutomationRoot = 'C:\Users\ustcw\.codex\automations'
+$AutomationPath = "C:\Users\ustcw\.codex\automations\$AutomationId\automation.toml"
+Set-Location $Wt
+$Head = (git rev-parse HEAD).Trim()
+$State = Get-Content -Raw -Encoding utf8 $ActiveDoc
+if ($State -notmatch 'stage1_head:\s*`?([0-9a-f]{40})`?') { throw 'Missing frozen Stage 1 head' }
+$FrozenHead = $Matches[1]
+if ($State -notmatch 'stage1_validator_sha256:\s*`?([0-9a-f]{64})`?') { throw 'Missing frozen validator SHA' }
+$FrozenValidatorSha = $Matches[1]
+if ($State -notmatch 'stage1_source_verdict:\s*SMOKE_PASS') { throw 'Source evidence did not pass its gate' }
+$CurrentValidatorSha = (Get-FileHash -Algorithm SHA256 $Validator).Hash.ToLowerInvariant()
+$RemoteHead = ((git ls-remote origin "refs/heads/$Branch") -split '\s+')[0]
+if ($Head -ne $ExpectedHead -or $FrozenHead -ne $ExpectedHead -or $RemoteHead -ne $ExpectedHead -or
+    $CurrentValidatorSha -ne $ExpectedValidatorSha -or $FrozenValidatorSha -ne $ExpectedValidatorSha) {
+  throw 'Hard-coded head, active doc, local/remote head, or validator drifted before witness dispatch'
+}
+function Read-TomlValue {
+  param([string]$Text, [string]$Key)
+  $Found = [regex]::Matches($Text, ('(?m)^' + [regex]::Escape($Key) + '\s*=\s*"([^"]*)"\s*$'))
+  if ($Found.Count -gt 1) { throw "Duplicate TOML key: $Key" }
+  if ($Found.Count -eq 0) { return $null }
+  return $Found[0].Groups[1].Value
+}
+$CurrentThreadActiveHeartbeats = @(Get-ChildItem -LiteralPath $AutomationRoot -Filter automation.toml -File -Recurse -ErrorAction Stop | ForEach-Object {
+  $CandidateToml = [IO.File]::ReadAllText($_.FullName, (New-Object Text.UTF8Encoding($false)))
+  if ((Read-TomlValue $CandidateToml kind) -ceq 'heartbeat' -and
+      (Read-TomlValue $CandidateToml status) -ceq 'ACTIVE' -and
+      (Read-TomlValue $CandidateToml target_thread_id) -ceq $ThreadId) {
+    [pscustomobject]@{Path=$_.FullName;Id=(Read-TomlValue $CandidateToml id);Text=$CandidateToml}
+  }
+})
+if ($CurrentThreadActiveHeartbeats.Count -ne 0) { throw 'Current thread ACTIVE heartbeat count is not zero before witness dispatch' }
+$TargetToml = [IO.File]::ReadAllText($AutomationPath, (New-Object Text.UTF8Encoding($false)))
+$ExpectedToml = [ordered]@{id=$AutomationId;status='PAUSED';kind='heartbeat';target_thread_id=$ThreadId;rrule='RRULE:FREQ=MINUTELY;INTERVAL=30';prompt='检查CI状态'}
+foreach ($Key in $ExpectedToml.Keys) { if ((Read-TomlValue $TargetToml $Key) -cne $ExpectedToml[$Key]) { throw "Native heartbeat drift: $Key" } }
+if ((Get-FileHash -Algorithm SHA256 $GoalBridge).Hash.ToLowerInvariant() -ne $ExpectedGoalBridgeSha) { throw 'Goal bridge SHA drift' }
+$Tokens = $null; $Errors = $null
+[Management.Automation.Language.Parser]::ParseFile($GoalBridge, [ref]$Tokens, [ref]$Errors) | Out-Null
+if ($Errors.Count) { throw ($Errors | Out-String) }
+$SelfTestOutput = @(& 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' -NoProfile -ExecutionPolicy Bypass -File $GoalBridge -SelfTest)
+if ($LASTEXITCODE -ne 0 -or ($SelfTestOutput -join "`n") -notmatch 'Heartbeat self-test passed \(18 cases\)\.') { throw 'Heartbeat self-test failed before witness dispatch' }
+$LocalPollers = @(Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object {
+  $_.ProcessId -ne $PID -and -not [string]::IsNullOrWhiteSpace([string]$_.CommandLine) -and
+    (([string]$_.CommandLine).IndexOf($GoalBridge, [StringComparison]::OrdinalIgnoreCase) -ge 0 -or
+     [string]$_.CommandLine -match '(?i)gh(?:\.exe)?(?:"|\s)+run\s+watch(?:\s|$)' -or
+     ([string]$_.CommandLine -match '(?i)gh(?:\.exe)?(?:"|\s)+run\s+(?:view|list)(?:\s|$)' -and [string]$_.CommandLine -match '(?i)(?:Start-Sleep|sleep\.exe|while\s*\()'))
+})
+if ($LocalPollers.Count) { throw 'Local CI poller survivor detected before witness dispatch' }
 $RunningRaw = @(gh run list --repo psiQAQ/pyscf --workflow ci-precision-check.yml --branch $Branch --event workflow_dispatch --limit 20 --json status)
 if ($LASTEXITCODE -ne 0) { throw 'Failed to list active witness runs' }
 $RunningParsed = ConvertFrom-Json -InputObject ($RunningRaw -join "`n") -ErrorAction Stop
@@ -1004,6 +1093,12 @@ if ($LASTEXITCODE -ne 0) { throw 'Failed to list pre-dispatch witness runs' }
 $BeforeParsed = ConvertFrom-Json -InputObject ($BeforeRaw -join "`n") -ErrorAction Stop
 $Before = @($BeforeParsed)
 $BeforeMax = if ($Before.Count) { [long](($Before | Measure-Object -Property databaseId -Maximum).Maximum) } else { [long]0 }
+$DispatchStartedAtUtc = [DateTimeOffset]::UtcNow.ToString('o')
+```
+
+Use `apply_patch` before `gh workflow run` to record the frozen head/branch/workflow/selection/inputs/artifact/validator, `monitor_before_max: $BeforeMax`, and `monitor_dispatch_started_at_utc: $DispatchStartedAtUtc`。Goal remains `active` and no monitor exists during this bounded dispatch window。Then continue in the same shell:
+
+```powershell
 gh workflow run ci-precision-check.yml --repo psiQAQ/pyscf --ref $Branch `
   --raw-field nodeids_file=$Selection --raw-field repeats=1 `
   --raw-field platform=windows-latest --raw-field python_version=3.12 `
@@ -1020,31 +1115,51 @@ for ($i=0; $i -lt 12; $i++) {
   if ($Candidates.Count -gt 1) { throw 'Ambiguous witness runs' }
   Start-Sleep -Seconds 5
 }
-if ($Candidates.Count -ne 1) { throw 'Witness not found in 60 seconds' }
+if ($Candidates.Count -ne 1) {
+  Write-Output 'WITNESS_RUN_ID_NOT_BOUND'
+  return
+}
 $WitnessRunId = [long]$Candidates[0].databaseId
 ```
 
-Use `apply_patch` to record `stage1_witness_run_id/head/branch/selection/inputs/artifact` in active doc. Create/update the sole heartbeat with:
+As soon as `$WitnessRunId` exists, use `apply_patch` before any further GitHub read to persist it with `$ExpectedHead`, branch, workflow, selection, exact inputs/artifact, dispatch timestamp, validator SHA, and the terminal Task 5.3 command。If `WITNESS_RUN_ID_NOT_BOUND` was printed, record `$BeforeMax/$ExpectedHead` and this exact recovery: rerun only the same `gh run list` query, accept exactly one row with `databaseId > $BeforeMax` and `headSha == $ExpectedHead`, persist its id, then continue below without dispatch。Goal stays `active`; never redispatch or choose “latest”。Do not wait for a job to materialize before starting the fallback；queued/zero-job handling belongs to the reviewed script。
+
+Start the only hidden 30-minute witness heartbeat, then verify its process and reconcile Goal to `paused` with the audited setter-plus-readback one-shot:
 
 ```powershell
-$Heartbeat = 'D:\workspace\pyscf\.agents\active\libxc-712-ci-heartbeat.ps1'
 $PowerShell = 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
 $HeartbeatArgs = @(
-  '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $Heartbeat,
+  '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $GoalBridge,
   '-TargetRunIds', [string]$WitnessRunId,
-  '-TargetHeadSha', $Head,
-  '-IntervalSeconds', '900',
+  '-TargetHeadSha', '2cd242eec13d0f4a80059738540ea14418b94abd',
+  '-IntervalSeconds', '1800',
   '-WakeAfterMinutes', '0'
 )
-$HeartbeatProcess = Start-Process -FilePath $PowerShell -ArgumentList $HeartbeatArgs `
-  -WindowStyle Hidden -PassThru
+$HeartbeatProcess = Start-Process -FilePath $PowerShell -ArgumentList $HeartbeatArgs -WindowStyle Hidden -PassThru
 Start-Sleep -Seconds 2
 if ($HeartbeatProcess.HasExited) { throw "Witness heartbeat exited early: $($HeartbeatProcess.ExitCode)" }
 $HeartbeatCim = Get-CimInstance Win32_Process -Filter "ProcessId=$($HeartbeatProcess.Id)"
-if ($HeartbeatCim.ExecutablePath -ne $PowerShell) { throw 'Heartbeat executable mismatch' }
+if ($HeartbeatCim.ExecutablePath -cne $PowerShell) { throw 'Witness heartbeat executable mismatch' }
+$ExpectedCommandTokens = @($GoalBridge, [string]$WitnessRunId, '2cd242eec13d0f4a80059738540ea14418b94abd', '-IntervalSeconds 1800', '-WakeAfterMinutes 0')
+foreach ($Token in $ExpectedCommandTokens) {
+  if ([string]$HeartbeatCim.CommandLine -notlike "*$Token*") { throw "Witness heartbeat command line missing: $Token" }
+}
+$GoalRaw = @(& $PowerShell -NoProfile -ExecutionPolicy Bypass -File $GoalBridge -SetGoalStatus paused)
+if ($LASTEXITCODE -ne 0) { throw 'Paused Goal reconciliation failed' }
+$Goal = ConvertFrom-Json -InputObject ($GoalRaw -join "`n") -ErrorAction Stop
+if ($Goal.threadId -cne $ThreadId -or $Goal.status -cne 'paused') { throw 'Paused Goal readback mismatch' }
+$HeartbeatCim = Get-CimInstance Win32_Process -Filter "ProcessId=$($HeartbeatProcess.Id)"
+if ($null -eq $HeartbeatCim) {
+  $GoalRaw = @(& $PowerShell -NoProfile -ExecutionPolicy Bypass -File $GoalBridge -SetGoalStatus active)
+  if ($LASTEXITCODE -ne 0) { throw 'Witness heartbeat exited after Goal pause; Goal reconciliation to active failed' }
+  $Goal = ConvertFrom-Json -InputObject ($GoalRaw -join "`n") -ErrorAction Stop
+  if ($Goal.threadId -cne $ThreadId -or $Goal.status -cne 'active') { throw 'Witness heartbeat exited after Goal pause; active Goal readback mismatch' }
+  throw 'Witness heartbeat exited after Goal pause and Goal was reconciled active'
+}
+$MonitorStartedAtUtc = [DateTimeOffset]::UtcNow.ToString('o')
 ```
 
-Use `apply_patch` to record heartbeat PID, executable, arguments, 900-second interval, and run id in active doc。The script verifies Goal paused before polling, checks only `$WitnessRunId`, and exits after terminal state while verifying Goal active。Do not also run an app automation, another PS loop, or `gh run watch`。
+Use `apply_patch` to record `monitor_kind: ps1`, `monitor_pid: $HeartbeatProcess.Id`, executable, exact command line, run/head, `monitor_interval_seconds: 1800`, `monitor_timeout_gate_minutes: 0`, `$MonitorStartedAtUtc`, expected artifact, validator SHA, and Task 5.3 next command。Do not start any second monitor。
 
 - [ ] **5.3 Freeze/download/validate witness in a fresh shell**
 
@@ -1052,45 +1167,99 @@ Use `apply_patch` to record heartbeat PID, executable, arguments, 900-second int
 $Wt = 'D:\workspace\pyscf\.worktrees\libxc-712-sgx-extra-cycle-telemetry'
 $Validator = 'D:\workspace\pyscf\.agents\active\precision-ci\scripts\validate_sgx_hse06_telemetry.py'
 $ActiveDoc = 'D:\workspace\pyscf\.agents\active\libxc-712-release-revalidation.md'
+$GoalBridge = 'D:\workspace\pyscf\.agents\active\libxc-712-ci-heartbeat.ps1'
 $ArchiveRoot = 'D:\workspace\pyscf\.agents\archive\precision-ci\experiments'
 $Branch = 'codex/investigate/libxc-712-sgx-extra-cycle-telemetry'
+$ThreadId = '019f64bd-77a5-7573-88e9-fd80b1882e70'
+$ExpectedHead = '2cd242eec13d0f4a80059738540ea14418b94abd'
+$ExpectedValidatorSha = '38088856545baf89e8ab9c054b943d96272359a42bfd582501184260ccb3c8b2'
 $NodeId = 'pyscf/sgx/grad/test/test_rks.py::KnownValues::test_finite_diff_grad_settings2_hse06_telemetry'
 Set-Location $Wt
 $Head = (git rev-parse HEAD).Trim()
 $Text = Get-Content -Raw -Encoding utf8 $ActiveDoc
-if ($Text -notmatch 'stage1_head:\s*([0-9a-f]{40})') { throw 'Missing frozen head' }
+if ($Text -notmatch 'stage1_witness_run_id:\s*`?(\d+)`?') { throw 'Missing witness id' }
+$RunId = [long]$Matches[1]
+if ($Text -notmatch 'monitor_kind:\s*`?ps1`?') { throw 'Witness monitor kind is not ps1' }
+if ($Text -notmatch 'monitor_pid:\s*`?(\d+)`?') { throw 'Missing witness monitor PID' }
+$MonitorPid = [long]$Matches[1]
+$MonitorProcess = Get-CimInstance Win32_Process -Filter "ProcessId=$MonitorPid" -ErrorAction SilentlyContinue
+if ($null -ne $MonitorProcess) { throw "Witness heartbeat PID $MonitorPid is still running; do not validate yet" }
+if ($Text -notmatch 'monitor_run_id:\s*`?(\d+)`?' -or [long]$Matches[1] -ne $RunId) {
+  throw 'Monitor/witness run id mismatch'
+}
+$PowerShell = 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
+$GoalRaw = @(& $PowerShell -NoProfile -ExecutionPolicy Bypass -File $GoalBridge -SetGoalStatus active)
+if ($LASTEXITCODE -ne 0) { throw 'Could not reconcile active Goal before witness validation' }
+$Goal = ConvertFrom-Json -InputObject ($GoalRaw -join "`n") -ErrorAction Stop
+if ($Goal.threadId -cne $ThreadId -or $Goal.status -cne 'active') { throw 'Active Goal readback mismatch' }
+if ($Text -notmatch 'stage1_head:\s*`?([0-9a-f]{40})`?') { throw 'Missing frozen head' }
 $FrozenHead = $Matches[1]
-if ($Text -notmatch 'stage1_validator_sha256:\s*([0-9a-f]{64})') { throw 'Missing frozen validator SHA' }
+if ($Text -notmatch 'stage1_validator_sha256:\s*`?([0-9a-f]{64})`?') { throw 'Missing frozen validator SHA' }
 $FrozenValidatorSha = $Matches[1]
 if ($Text -notmatch 'stage1_source_verdict:\s*SMOKE_PASS') { throw 'Source gate missing' }
 $CurrentValidatorSha = (Get-FileHash -Algorithm SHA256 $Validator).Hash.ToLowerInvariant()
 $RemoteHead = ((git ls-remote origin "refs/heads/$Branch") -split '\s+')[0]
-if ($Head -ne $FrozenHead -or $Head -ne $RemoteHead -or $CurrentValidatorSha -ne $FrozenValidatorSha) { throw 'Head or validator drifted before witness validation' }
-if ($Text -notmatch 'stage1_witness_run_id:\s*(\d+)') { throw 'Missing witness id' }
-$RunId = [long]$Matches[1]
+if ($Head -ne $ExpectedHead -or $FrozenHead -ne $ExpectedHead -or $RemoteHead -ne $ExpectedHead -or
+    $CurrentValidatorSha -ne $ExpectedValidatorSha -or $FrozenValidatorSha -ne $ExpectedValidatorSha) {
+  throw 'Hard-coded head, active doc, local/remote head, or validator drifted before witness validation'
+}
 $RunRaw = @(gh run view $RunId --repo psiQAQ/pyscf --json attempt,event,headBranch,headSha,status,conclusion,workflowName,jobs,url)
 if ($LASTEXITCODE -ne 0) { throw 'Failed to read witness run' }
 $Run = ConvertFrom-Json -InputObject ($RunRaw -join "`n") -ErrorAction Stop
-if ($Run.status -ne 'completed' -or $Run.attempt -ne 1 -or $Run.event -ne 'workflow_dispatch' -or $Run.headSha -ne $Head -or $Run.headBranch -ne $Branch -or $Run.workflowName -ne 'Precision investigation' -or @($Run.jobs).Count -ne 1) { throw 'Witness identity invalid' }
+$RunJobs = @($Run.jobs)
+if ($Run.status -ne 'completed' -or $Run.attempt -ne 1 -or $Run.event -ne 'workflow_dispatch' -or
+    $Run.headSha -ne $Head -or $Run.headBranch -ne $Branch -or $Run.workflowName -ne 'Precision investigation' -or
+    $RunJobs.Count -ne 1 -or $RunJobs[0].name -ne 'precision' -or $RunJobs[0].status -ne 'completed') {
+  throw 'Witness run/job identity invalid'
+}
+function Test-JsonInteger {
+  param($Value)
+  return ($Value -is [int] -or $Value -is [long] -or $Value -is [uint32] -or $Value -is [uint64])
+}
 $A = @()
 for ($i=0; $i -lt 12; $i++) {
   $ApiRaw = @(gh api "repos/psiQAQ/pyscf/actions/runs/$RunId/artifacts")
   if ($LASTEXITCODE -ne 0) { throw 'Failed to read witness artifacts' }
   $Api = ConvertFrom-Json -InputObject ($ApiRaw -join "`n") -ErrorAction Stop
+  if ($null -eq $Api.PSObject.Properties['total_count'] -or
+      $null -eq $Api.PSObject.Properties['artifacts'] -or
+      -not (Test-JsonInteger $Api.total_count) -or $Api.total_count -lt 0 -or
+      $Api.artifacts -isnot [System.Array]) {
+    throw 'Witness artifact envelope invalid'
+  }
   $A = @($Api.artifacts)
+  if ([long]$Api.total_count -ne $A.Count) { throw 'Witness artifact cardinality mismatch' }
   if ($Api.total_count -gt 1 -or $A.Count -gt 1) { throw 'Multiple witness artifacts' }
+  if ($Api.total_count -eq 1 -and $A.Count -eq 1) {
+    $Artifact = $A[0]
+    $RequiredFields = @('id', 'name', 'expired', 'size_in_bytes', 'digest')
+    if (@($RequiredFields | Where-Object { $null -eq $Artifact.PSObject.Properties[$_] }).Count -ne 0 -or
+        -not (Test-JsonInteger $Artifact.id) -or $Artifact.id -le 0 -or
+        $Artifact.name -isnot [string] -or $Artifact.name -cne 'precision-Windows-py3.12' -or
+        $Artifact.expired -isnot [bool] -or $Artifact.expired -ne $false -or
+        -not (Test-JsonInteger $Artifact.size_in_bytes) -or $Artifact.size_in_bytes -le 0 -or
+        $Artifact.digest -isnot [string] -or $Artifact.digest -cnotmatch '^sha256:[0-9a-f]{64}$') {
+      throw 'Witness artifact metadata invalid'
+    }
+  }
   $ArtifactReady = $Api.total_count -eq 1 -and $A.Count -eq 1 -and `
-    $A[0].name -eq 'precision-Windows-py3.12' -and -not $A[0].expired -and `
-    $A[0].size_in_bytes -gt 0 -and $A[0].digest -match '^sha256:[0-9a-f]{64}$'
+    (Test-JsonInteger $A[0].id) -and $A[0].id -gt 0 -and `
+    $A[0].name -ceq 'precision-Windows-py3.12' -and $A[0].expired -is [bool] -and `
+    $A[0].expired -eq $false -and (Test-JsonInteger $A[0].size_in_bytes) -and `
+    $A[0].size_in_bytes -gt 0 -and $A[0].digest -cmatch '^sha256:[0-9a-f]{64}$'
   if ($ArtifactReady) { break }
   Start-Sleep -Seconds 5
 }
-if ($Api.total_count -ne 1 -or $A.Count -ne 1 -or $A[0].name -ne 'precision-Windows-py3.12' -or $A[0].expired -or $A[0].size_in_bytes -le 0 -or $A[0].digest -notmatch '^sha256:[0-9a-f]{64}$') { throw 'Witness artifact invalid' }
+if ($Api.total_count -eq 0 -and $A.Count -eq 0) {
+  Write-Output 'WITNESS_ARTIFACT_NOT_READY'
+  return
+}
+if ($Api.total_count -ne 1 -or $A.Count -ne 1) { throw 'Witness artifact cardinality invalid' }
 $Dir = Join-Path $ArchiveRoot "$RunId-sgx-hse06-telemetry-stage1-witness-windows-py312"
 if (Test-Path $Dir) { throw "Archive exists: $Dir" }
 New-Item -ItemType Directory $Dir | Out-Null
 $Job = @($Run.jobs)[0]
-$Meta = [ordered]@{run_id=$RunId;run_attempt=$Run.attempt;event=$Run.event;workflow=$Run.workflowName;head_sha=$Run.headSha;head_branch=$Run.headBranch;status=$Run.status;conclusion=$Run.conclusion;job_count=@($Run.jobs).Count;job=[ordered]@{name=$Job.name;status=$Job.status;conclusion=$Job.conclusion};artifact_count=$Api.total_count;artifact=[ordered]@{id=$A[0].id;name=$A[0].name;digest=$A[0].digest;size_in_bytes=$A[0].size_in_bytes;expired=$A[0].expired}}
+$Meta = [ordered]@{databaseId=$RunId;attempt=$Run.attempt;event=$Run.event;workflowName=$Run.workflowName;headSha=$Run.headSha;headBranch=$Run.headBranch;status=$Run.status;conclusion=$Run.conclusion;jobs=@([ordered]@{name=$Job.name;status=$Job.status;conclusion=$Job.conclusion});artifacts=@([ordered]@{id=$A[0].id;name=$A[0].name;digest=$A[0].digest;sizeInBytes=$A[0].size_in_bytes;expired=$A[0].expired})}
 $Utf8 = New-Object Text.UTF8Encoding($false)
 [IO.File]::WriteAllText((Join-Path $Dir 'run-metadata.json'), ($Meta | ConvertTo-Json -Depth 5), $Utf8)
 gh run download $RunId --repo psiQAQ/pyscf --name $A[0].name --dir $Dir
@@ -1104,31 +1273,82 @@ $ArchivedValidator = Join-Path $Dir 'validate_sgx_hse06_telemetry.py'
 if ((Get-FileHash $ArchivedValidator).Hash.ToLowerInvariant() -ne $V.validator_sha256) { throw 'Validator SHA mismatch' }
 ```
 
-Use `apply_patch` to record `stage1_witness_verdict: $V.verdict`, `stage1_witness_head: $Head`, `stage1_witness_validator_sha256: $V.validator_sha256`, counts, first finding, run id, artifact id/digest/size, and report path in active doc。If verdict is not `SMOKE_PASS`, retain the valid evidence and stop cleanly before 5.4; do not throw it as a pipeline error and do not rerun。
+If `WITNESS_ARTIFACT_NOT_READY` is printed after the bounded 60-second API wait, this is upload latency, not `INVALID`。Keep Goal `active`; use `apply_patch` to record the exact run id, observation timestamp, exited monitor PID, and `monitor_next_command: Re-run Task 5.3 for stage1_witness_run_id $RunId without redispatch`, then stop cleanly。
+
+Use one `apply_patch` to record `stage1_witness_verdict: $V.verdict`, `stage1_witness_head: $Head`, `stage1_witness_validator_sha256: $V.validator_sha256`, counts, first finding, run id, artifact id/digest/size, report path, exited monitor PID, validation timestamp, and the exact next command。For `SMOKE_PASS`, the next command is Task 5.4 in this plan；otherwise it is the evidence-contract diagnosis for this exact run。If verdict is not `SMOKE_PASS`, retain the valid evidence and stop cleanly before 5.4；do not treat it as a pipeline error and do not rerun。
 
 - [ ] **5.4 Dispatch and identify 200-repeat run**
 
 ```powershell
 $Wt = 'D:\workspace\pyscf\.worktrees\libxc-712-sgx-extra-cycle-telemetry'
+$Validator = 'D:\workspace\pyscf\.agents\active\precision-ci\scripts\validate_sgx_hse06_telemetry.py'
 $ActiveDoc = 'D:\workspace\pyscf\.agents\active\libxc-712-release-revalidation.md'
+$GoalBridge = 'D:\workspace\pyscf\.agents\active\libxc-712-ci-heartbeat.ps1'
 $Branch = 'codex/investigate/libxc-712-sgx-extra-cycle-telemetry'
 $Selection = '.github/workflows/precision-libxc-712-sgx-hse06-telemetry-nodeids.txt'
+$ExpectedHead = '2cd242eec13d0f4a80059738540ea14418b94abd'
+$ExpectedValidatorSha = '38088856545baf89e8ab9c054b943d96272359a42bfd582501184260ccb3c8b2'
+$ExpectedGoalBridgeSha = '4198340e5e56caa9a103f37a133bd9cb5ab37d839771f5aae832c280b0e2f639'
+$AutomationId = 'libxc-3-pbc-hse06-sgx-finite-difference-hse06-pbc-hse'
+$ThreadId = '019f64bd-77a5-7573-88e9-fd80b1882e70'
+$AutomationRoot = 'C:\Users\ustcw\.codex\automations'
+$AutomationPath = "C:\Users\ustcw\.codex\automations\$AutomationId\automation.toml"
 Set-Location $Wt
 $Head = (git rev-parse HEAD).Trim()
 $State = Get-Content -Raw -Encoding utf8 $ActiveDoc
-if ($State -notmatch 'stage1_head:\s*([0-9a-f]{40})') { throw 'Missing frozen head' }
+if ($State -notmatch 'stage1_head:\s*`?([0-9a-f]{40})`?') { throw 'Missing frozen head' }
 $FrozenHead = $Matches[1]
-if ($State -notmatch 'stage1_validator_sha256:\s*([0-9a-f]{64})') { throw 'Missing frozen validator SHA' }
+if ($State -notmatch 'stage1_validator_sha256:\s*`?([0-9a-f]{64})`?') { throw 'Missing frozen validator SHA' }
 $FrozenValidatorSha = $Matches[1]
 if ($State -notmatch 'stage1_source_verdict:\s*SMOKE_PASS') { throw 'Source gate missing' }
-if ($State -notmatch 'stage1_witness_verdict:\s*SMOKE_PASS') { throw 'Witness was not validated' }
-if ($State -notmatch 'stage1_witness_head:\s*([0-9a-f]{40})') { throw 'Missing witness head' }
+if ($State -notmatch '(?m)^- stage1_witness_verdict:\s*(?:SMOKE_PASS|`SMOKE_PASS`)\s*$') { throw 'Witness was not validated' }
+if ($State -notmatch 'stage1_witness_head:\s*`?([0-9a-f]{40})`?') { throw 'Missing witness head' }
 $WitnessHead = $Matches[1]
-if ($State -notmatch 'stage1_witness_validator_sha256:\s*([0-9a-f]{64})') { throw 'Missing witness validator SHA' }
+if ($State -notmatch 'stage1_witness_validator_sha256:\s*`?([0-9a-f]{64})`?') { throw 'Missing witness validator SHA' }
 $WitnessValidatorSha = $Matches[1]
-$CurrentValidatorSha = (Get-FileHash -Algorithm SHA256 'D:\workspace\pyscf\.agents\active\precision-ci\scripts\validate_sgx_hse06_telemetry.py').Hash.ToLowerInvariant()
+$CurrentValidatorSha = (Get-FileHash -Algorithm SHA256 $Validator).Hash.ToLowerInvariant()
 $RemoteHead = ((git ls-remote origin "refs/heads/$Branch") -split '\s+')[0]
-if ($Head -ne $FrozenHead -or $Head -ne $WitnessHead -or $Head -ne $RemoteHead -or $CurrentValidatorSha -ne $FrozenValidatorSha -or $CurrentValidatorSha -ne $WitnessValidatorSha) { throw 'Head or validator drifted after witness' }
+if ($Head -ne $ExpectedHead -or $FrozenHead -ne $ExpectedHead -or $WitnessHead -ne $ExpectedHead -or $RemoteHead -ne $ExpectedHead -or
+    $CurrentValidatorSha -ne $ExpectedValidatorSha -or $FrozenValidatorSha -ne $ExpectedValidatorSha -or $WitnessValidatorSha -ne $ExpectedValidatorSha) {
+  throw 'Hard-coded head, active doc, local/remote head, or validator drifted after witness'
+}
+function Read-TomlValue {
+  param([string]$Text, [string]$Key)
+  $Found = [regex]::Matches($Text, ('(?m)^' + [regex]::Escape($Key) + '\s*=\s*"([^"]*)"\s*$'))
+  if ($Found.Count -gt 1) { throw "Duplicate TOML key: $Key" }
+  if ($Found.Count -eq 0) { return $null }
+  return $Found[0].Groups[1].Value
+}
+$CurrentThreadActiveHeartbeats = @(Get-ChildItem -LiteralPath $AutomationRoot -Filter automation.toml -File -Recurse -ErrorAction Stop | ForEach-Object {
+  $CandidateToml = [IO.File]::ReadAllText($_.FullName, (New-Object Text.UTF8Encoding($false)))
+  if ((Read-TomlValue $CandidateToml kind) -ceq 'heartbeat' -and
+      (Read-TomlValue $CandidateToml status) -ceq 'ACTIVE' -and
+      (Read-TomlValue $CandidateToml target_thread_id) -ceq $ThreadId) {
+    [pscustomobject]@{Path=$_.FullName;Id=(Read-TomlValue $CandidateToml id);Text=$CandidateToml}
+  }
+})
+if ($CurrentThreadActiveHeartbeats.Count -ne 0) { throw 'Current thread ACTIVE heartbeat count is not zero before formal dispatch' }
+$TargetToml = [IO.File]::ReadAllText($AutomationPath, (New-Object Text.UTF8Encoding($false)))
+$ExpectedToml = [ordered]@{id=$AutomationId;status='PAUSED';kind='heartbeat';target_thread_id=$ThreadId;rrule='RRULE:FREQ=MINUTELY;INTERVAL=30';prompt='检查CI状态'}
+foreach ($Key in $ExpectedToml.Keys) { if ((Read-TomlValue $TargetToml $Key) -cne $ExpectedToml[$Key]) { throw "Native heartbeat drift: $Key" } }
+if ((Get-FileHash -Algorithm SHA256 $GoalBridge).Hash.ToLowerInvariant() -ne $ExpectedGoalBridgeSha) { throw 'Goal bridge SHA drift' }
+$Tokens = $null; $Errors = $null
+[Management.Automation.Language.Parser]::ParseFile($GoalBridge, [ref]$Tokens, [ref]$Errors) | Out-Null
+if ($Errors.Count) { throw ($Errors | Out-String) }
+$SelfTestOutput = @(& 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' -NoProfile -ExecutionPolicy Bypass -File $GoalBridge -SelfTest)
+if ($LASTEXITCODE -ne 0 -or ($SelfTestOutput -join "`n") -notmatch 'Heartbeat self-test passed \(18 cases\)\.') { throw 'Heartbeat self-test failed before formal dispatch' }
+$Processes = @(Get-CimInstance Win32_Process -ErrorAction Stop)
+$LocalPollers = @($Processes | Where-Object {
+  if ($_.ProcessId -eq $PID -or [string]::IsNullOrWhiteSpace([string]$_.CommandLine)) { $false }
+  else {
+    $CommandLine = [string]$_.CommandLine
+    $CommandLine.IndexOf($GoalBridge, [StringComparison]::OrdinalIgnoreCase) -ge 0 -or
+      $CommandLine -match '(?i)gh(?:\.exe)?(?:"|\s)+run\s+watch(?:\s|$)' -or
+      ($CommandLine -match '(?i)gh(?:\.exe)?(?:"|\s)+run\s+(?:view|list)(?:\s|$)' -and
+       $CommandLine -match '(?i)(?:Start-Sleep|sleep\.exe|while\s*\()')
+  }
+})
+if ($LocalPollers.Count) { throw 'Local CI poller survivor detected before formal dispatch' }
 $RunningRaw = @(gh run list --repo psiQAQ/pyscf --workflow ci-precision-check.yml --branch $Branch --event workflow_dispatch --limit 20 --json status)
 if ($LASTEXITCODE -ne 0) { throw 'Failed to list active formal runs' }
 $RunningParsed = ConvertFrom-Json -InputObject ($RunningRaw -join "`n") -ErrorAction Stop
@@ -1140,6 +1360,12 @@ if ($LASTEXITCODE -ne 0) { throw 'Failed to list pre-dispatch formal runs' }
 $BeforeParsed = ConvertFrom-Json -InputObject ($BeforeRaw -join "`n") -ErrorAction Stop
 $Before = @($BeforeParsed)
 $BeforeMax = if ($Before.Count) { [long](($Before | Measure-Object -Property databaseId -Maximum).Maximum) } else { [long]0 }
+$DispatchStartedAtUtc = [DateTimeOffset]::UtcNow.ToString('o')
+```
+
+Use `apply_patch` before formal dispatch to record frozen formal expectations, repeats `200`, timeout gate `300`, `monitor_before_max: $BeforeMax`, and `$DispatchStartedAtUtc`。Goal remains `active` and no monitor exists during this bounded dispatch window。Then continue in the same shell:
+
+```powershell
 gh workflow run ci-precision-check.yml --repo psiQAQ/pyscf --ref $Branch `
   --raw-field nodeids_file=$Selection --raw-field repeats=200 `
   --raw-field platform=windows-latest --raw-field python_version=3.12 `
@@ -1156,31 +1382,51 @@ for ($i=0; $i -lt 12; $i++) {
   if ($Candidates.Count -gt 1) { throw 'Ambiguous formal runs' }
   Start-Sleep -Seconds 5
 }
-if ($Candidates.Count -ne 1) { throw 'Formal run not found in 60 seconds' }
+if ($Candidates.Count -ne 1) {
+  Write-Output 'FORMAL_RUN_ID_NOT_BOUND'
+  return
+}
 $RunId = [long]$Candidates[0].databaseId
 ```
 
-Use `apply_patch` to write `$RunId` as `stage1_run_id` plus head/branch/selection/inputs/artifact in active doc。
+As soon as `$RunId` exists, use `apply_patch` before any further GitHub read to persist it with `$ExpectedHead`, branch, workflow, selection, exact inputs/artifact, dispatch timestamp, validator SHA, and the terminal Task 5.5 command。If `FORMAL_RUN_ID_NOT_BOUND` was printed, record `$BeforeMax/$ExpectedHead` and this exact recovery: rerun only the same `gh run list` query, accept exactly one row with `databaseId > $BeforeMax` and `headSha == $ExpectedHead`, persist its id, then continue below without dispatch。Goal stays `active`; never redispatch or choose “latest”。Do not wait for a job to materialize；queued/zero-job handling belongs to the reviewed script。
+
+Start the only hidden 30-minute formal heartbeat, then verify its process and reconcile Goal to `paused` with the audited setter-plus-readback one-shot:
 
 ```powershell
-$Heartbeat = 'D:\workspace\pyscf\.agents\active\libxc-712-ci-heartbeat.ps1'
 $PowerShell = 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
 $HeartbeatArgs = @(
-  '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $Heartbeat,
+  '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $GoalBridge,
   '-TargetRunIds', [string]$RunId,
-  '-TargetHeadSha', $Head,
+  '-TargetHeadSha', '2cd242eec13d0f4a80059738540ea14418b94abd',
   '-IntervalSeconds', '1800',
   '-WakeAfterMinutes', '300'
 )
-$HeartbeatProcess = Start-Process -FilePath $PowerShell -ArgumentList $HeartbeatArgs `
-  -WindowStyle Hidden -PassThru
+$HeartbeatProcess = Start-Process -FilePath $PowerShell -ArgumentList $HeartbeatArgs -WindowStyle Hidden -PassThru
 Start-Sleep -Seconds 2
 if ($HeartbeatProcess.HasExited) { throw "Formal heartbeat exited early: $($HeartbeatProcess.ExitCode)" }
 $HeartbeatCim = Get-CimInstance Win32_Process -Filter "ProcessId=$($HeartbeatProcess.Id)"
-if ($HeartbeatCim.ExecutablePath -ne $PowerShell) { throw 'Heartbeat executable mismatch' }
+if ($HeartbeatCim.ExecutablePath -cne $PowerShell) { throw 'Formal heartbeat executable mismatch' }
+$ExpectedCommandTokens = @($GoalBridge, [string]$RunId, '2cd242eec13d0f4a80059738540ea14418b94abd', '-IntervalSeconds 1800', '-WakeAfterMinutes 300')
+foreach ($Token in $ExpectedCommandTokens) {
+  if ([string]$HeartbeatCim.CommandLine -notlike "*$Token*") { throw "Formal heartbeat command line missing: $Token" }
+}
+$GoalRaw = @(& $PowerShell -NoProfile -ExecutionPolicy Bypass -File $GoalBridge -SetGoalStatus paused)
+if ($LASTEXITCODE -ne 0) { throw 'Paused Goal reconciliation failed' }
+$Goal = ConvertFrom-Json -InputObject ($GoalRaw -join "`n") -ErrorAction Stop
+if ($Goal.threadId -cne $ThreadId -or $Goal.status -cne 'paused') { throw 'Paused Goal readback mismatch' }
+$HeartbeatCim = Get-CimInstance Win32_Process -Filter "ProcessId=$($HeartbeatProcess.Id)"
+if ($null -eq $HeartbeatCim) {
+  $GoalRaw = @(& $PowerShell -NoProfile -ExecutionPolicy Bypass -File $GoalBridge -SetGoalStatus active)
+  if ($LASTEXITCODE -ne 0) { throw 'Formal heartbeat exited after Goal pause; Goal reconciliation to active failed' }
+  $Goal = ConvertFrom-Json -InputObject ($GoalRaw -join "`n") -ErrorAction Stop
+  if ($Goal.threadId -cne $ThreadId -or $Goal.status -cne 'active') { throw 'Formal heartbeat exited after Goal pause; active Goal readback mismatch' }
+  throw 'Formal heartbeat exited after Goal pause and Goal was reconciled active'
+}
+$MonitorStartedAtUtc = [DateTimeOffset]::UtcNow.ToString('o')
 ```
 
-Use `apply_patch` to record heartbeat PID, executable, arguments, 1800-second interval, 300-minute wake gate, and run id。The script wakes the Goal on either terminal state or the precise in-progress threshold, then exits and releases its mutex。Do not run any second monitor。
+Use `apply_patch` to record `monitor_kind: ps1`, `monitor_pid: $HeartbeatProcess.Id`, executable, exact command line, run/head, `monitor_interval_seconds: 1800`, `monitor_timeout_gate_minutes: 300`, `$MonitorStartedAtUtc`, expected artifact, validator SHA, and Task 5.5 next command。Do not run any second monitor；only Task 5.5 may revalidate and cancel at the 300-minute gate。
 
 - [ ] **5.5 Freeze/download/validate formal artifact in a fresh shell**
 
@@ -1188,64 +1434,121 @@ Use `apply_patch` to record heartbeat PID, executable, arguments, 1800-second in
 $Wt = 'D:\workspace\pyscf\.worktrees\libxc-712-sgx-extra-cycle-telemetry'
 $Validator = 'D:\workspace\pyscf\.agents\active\precision-ci\scripts\validate_sgx_hse06_telemetry.py'
 $ActiveDoc = 'D:\workspace\pyscf\.agents\active\libxc-712-release-revalidation.md'
+$GoalBridge = 'D:\workspace\pyscf\.agents\active\libxc-712-ci-heartbeat.ps1'
 $ArchiveRoot = 'D:\workspace\pyscf\.agents\archive\precision-ci\experiments'
 $Branch = 'codex/investigate/libxc-712-sgx-extra-cycle-telemetry'
+$ThreadId = '019f64bd-77a5-7573-88e9-fd80b1882e70'
+$ExpectedHead = '2cd242eec13d0f4a80059738540ea14418b94abd'
+$ExpectedValidatorSha = '38088856545baf89e8ab9c054b943d96272359a42bfd582501184260ccb3c8b2'
 $NodeId = 'pyscf/sgx/grad/test/test_rks.py::KnownValues::test_finite_diff_grad_settings2_hse06_telemetry'
 Set-Location $Wt
 $Head = (git rev-parse HEAD).Trim()
 $Text = Get-Content -Raw -Encoding utf8 $ActiveDoc
-if ($Text -notmatch 'stage1_head:\s*([0-9a-f]{40})') { throw 'Missing frozen head' }
+if ($Text -notmatch 'stage1_run_id:\s*`?(\d+)`?') { throw 'Missing formal run id' }
+$RunId = [long]$Matches[1]
+if ($Text -notmatch 'monitor_kind:\s*`?ps1`?') { throw 'Formal monitor kind is not ps1' }
+if ($Text -notmatch 'monitor_pid:\s*`?(\d+)`?') { throw 'Missing formal monitor PID' }
+$MonitorPid = [long]$Matches[1]
+$MonitorProcess = Get-CimInstance Win32_Process -Filter "ProcessId=$MonitorPid" -ErrorAction SilentlyContinue
+if ($null -ne $MonitorProcess) { throw "Formal heartbeat PID $MonitorPid is still running; do not validate or cancel yet" }
+if ($Text -notmatch 'monitor_run_id:\s*`?(\d+)`?' -or [long]$Matches[1] -ne $RunId) { throw 'Monitor/formal run id mismatch' }
+$PowerShell = 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
+$GoalRaw = @(& $PowerShell -NoProfile -ExecutionPolicy Bypass -File $GoalBridge -SetGoalStatus active)
+if ($LASTEXITCODE -ne 0) { throw 'Could not reconcile active Goal before formal validation' }
+$Goal = ConvertFrom-Json -InputObject ($GoalRaw -join "`n") -ErrorAction Stop
+if ($Goal.threadId -cne $ThreadId -or $Goal.status -cne 'active') { throw 'Active Goal readback mismatch' }
+if ($Text -notmatch 'stage1_head:\s*`?([0-9a-f]{40})`?') { throw 'Missing frozen head' }
 $FrozenHead = $Matches[1]
-if ($Text -notmatch 'stage1_validator_sha256:\s*([0-9a-f]{64})') { throw 'Missing frozen validator SHA' }
+if ($Text -notmatch 'stage1_validator_sha256:\s*`?([0-9a-f]{64})`?') { throw 'Missing frozen validator SHA' }
 $FrozenValidatorSha = $Matches[1]
-if ($Text -notmatch 'stage1_witness_verdict:\s*SMOKE_PASS') { throw 'Witness gate missing' }
-if ($Text -notmatch 'stage1_witness_head:\s*([0-9a-f]{40})') { throw 'Missing witness head' }
+if ($Text -notmatch '(?m)^- stage1_witness_verdict:\s*(?:SMOKE_PASS|`SMOKE_PASS`)\s*$') { throw 'Witness gate missing' }
+if ($Text -notmatch 'stage1_witness_head:\s*`?([0-9a-f]{40})`?') { throw 'Missing witness head' }
 $WitnessHead = $Matches[1]
-if ($Text -notmatch 'stage1_witness_validator_sha256:\s*([0-9a-f]{64})') { throw 'Missing witness validator SHA' }
+if ($Text -notmatch 'stage1_witness_validator_sha256:\s*`?([0-9a-f]{64})`?') { throw 'Missing witness validator SHA' }
 $WitnessValidatorSha = $Matches[1]
 $CurrentValidatorSha = (Get-FileHash -Algorithm SHA256 $Validator).Hash.ToLowerInvariant()
 $RemoteHead = ((git ls-remote origin "refs/heads/$Branch") -split '\s+')[0]
-if ($Head -ne $FrozenHead -or $Head -ne $WitnessHead -or $Head -ne $RemoteHead -or $CurrentValidatorSha -ne $FrozenValidatorSha -or $CurrentValidatorSha -ne $WitnessValidatorSha) { throw 'Head or validator drifted before formal validation' }
-if ($Text -notmatch 'stage1_run_id:\s*(\d+)') { throw 'Missing formal run id' }
-$RunId = [long]$Matches[1]
-$SnapshotRaw = @(gh run view $RunId --repo psiQAQ/pyscf --json status,jobs)
-if ($LASTEXITCODE -ne 0) { throw 'Failed to read formal run state' }
-$Snapshot = ConvertFrom-Json -InputObject ($SnapshotRaw -join "`n") -ErrorAction Stop
-if ($Snapshot.status -ne 'completed') {
-  $Jobs = @($Snapshot.jobs)
-  if ($Jobs.Count -ne 1 -or $Jobs[0].status -ne 'in_progress' -or [string]::IsNullOrWhiteSpace([string]$Jobs[0].startedAt)) {
-    throw 'Heartbeat woke on a nonterminal state without a valid timeout; do not cancel'
+if ($Head -ne $ExpectedHead -or $FrozenHead -ne $ExpectedHead -or $WitnessHead -ne $ExpectedHead -or $RemoteHead -ne $ExpectedHead -or
+    $CurrentValidatorSha -ne $ExpectedValidatorSha -or $FrozenValidatorSha -ne $ExpectedValidatorSha -or $WitnessValidatorSha -ne $ExpectedValidatorSha) {
+  throw 'Hard-coded head, active doc, local/remote head, or validator drifted before formal validation'
+}
+$RunRaw = @(gh run view $RunId --repo psiQAQ/pyscf --json attempt,event,headBranch,headSha,status,conclusion,workflowName,jobs,url)
+if ($LASTEXITCODE -ne 0) { throw 'Failed to read formal run' }
+$Run = ConvertFrom-Json -InputObject ($RunRaw -join "`n") -ErrorAction Stop
+$Jobs = @($Run.jobs)
+if ($Run.attempt -ne 1 -or $Run.event -ne 'workflow_dispatch' -or $Run.headSha -ne $ExpectedHead -or
+    $Run.headBranch -ne $Branch -or $Run.workflowName -ne 'Precision investigation' -or
+    $Jobs.Count -ne 1 -or $Jobs[0].name -ne 'precision') {
+  throw 'Formal run/job identity invalid; do not cancel or download'
+}
+if ($Run.status -ne 'completed') {
+  if ($Text -notmatch 'monitor_timeout_gate_minutes:\s*`?300`?') {
+    throw 'Formal timeout handoff is not armed; do not cancel'
   }
-  $ElapsedMinutes = ((Get-Date).ToUniversalTime() - ([datetime]$Jobs[0].startedAt).ToUniversalTime()).TotalMinutes
-  if ($ElapsedMinutes -lt 300) { throw 'Heartbeat woke before the 300-minute gate; do not cancel' }
+  if ($Run.status -ne 'in_progress' -or $Jobs[0].status -ne 'in_progress' -or
+      [string]::IsNullOrWhiteSpace([string]$Jobs[0].startedAt)) {
+    throw 'Nonterminal formal state has no exact in-progress job; do not cancel'
+  }
+  $StartedAt = [DateTimeOffset]::MinValue
+  if (-not [DateTimeOffset]::TryParse([string]$Jobs[0].startedAt, [ref]$StartedAt)) {
+    throw 'Formal job startedAt is invalid; do not cancel'
+  }
+  $ElapsedMinutes = ([DateTimeOffset]::UtcNow - $StartedAt.ToUniversalTime()).TotalMinutes
+  if ($ElapsedMinutes -lt 300) { throw 'Formal job is below the 300-minute gate; do not cancel' }
   gh run cancel $RunId --repo psiQAQ/pyscf
   if ($LASTEXITCODE -ne 0) { throw 'Formal timeout cancel failed' }
   Write-Output 'FORMAL_TIMEOUT_CANCELLED'
   return
 }
-$RunRaw = @(gh run view $RunId --repo psiQAQ/pyscf --json attempt,event,headBranch,headSha,status,conclusion,workflowName,jobs,url)
-if ($LASTEXITCODE -ne 0) { throw 'Failed to read formal run' }
-$Run = ConvertFrom-Json -InputObject ($RunRaw -join "`n") -ErrorAction Stop
-if ($Run.status -ne 'completed' -or $Run.attempt -ne 1 -or $Run.event -ne 'workflow_dispatch' -or $Run.headSha -ne $Head -or $Run.headBranch -ne $Branch -or $Run.workflowName -ne 'Precision investigation' -or @($Run.jobs).Count -ne 1) { throw 'Formal run identity invalid' }
+if ($Jobs[0].status -ne 'completed') { throw 'Completed formal run has a nonterminal precision job' }
+function Test-JsonInteger {
+  param($Value)
+  return ($Value -is [int] -or $Value -is [long] -or $Value -is [uint32] -or $Value -is [uint64])
+}
 $A = @()
 for ($i=0; $i -lt 12; $i++) {
   $ApiRaw = @(gh api "repos/psiQAQ/pyscf/actions/runs/$RunId/artifacts")
   if ($LASTEXITCODE -ne 0) { throw 'Failed to read formal artifacts' }
   $Api = ConvertFrom-Json -InputObject ($ApiRaw -join "`n") -ErrorAction Stop
+  if ($null -eq $Api.PSObject.Properties['total_count'] -or
+      $null -eq $Api.PSObject.Properties['artifacts'] -or
+      -not (Test-JsonInteger $Api.total_count) -or $Api.total_count -lt 0 -or
+      $Api.artifacts -isnot [System.Array]) {
+    throw 'Formal artifact envelope invalid'
+  }
   $A = @($Api.artifacts)
+  if ([long]$Api.total_count -ne $A.Count) { throw 'Formal artifact cardinality mismatch' }
   if ($Api.total_count -gt 1 -or $A.Count -gt 1) { throw 'Multiple formal artifacts' }
+  if ($Api.total_count -eq 1 -and $A.Count -eq 1) {
+    $Artifact = $A[0]
+    $RequiredFields = @('id', 'name', 'expired', 'size_in_bytes', 'digest')
+    if (@($RequiredFields | Where-Object { $null -eq $Artifact.PSObject.Properties[$_] }).Count -ne 0 -or
+        -not (Test-JsonInteger $Artifact.id) -or $Artifact.id -le 0 -or
+        $Artifact.name -isnot [string] -or $Artifact.name -cne 'precision-Windows-py3.12' -or
+        $Artifact.expired -isnot [bool] -or $Artifact.expired -ne $false -or
+        -not (Test-JsonInteger $Artifact.size_in_bytes) -or $Artifact.size_in_bytes -le 0 -or
+        $Artifact.digest -isnot [string] -or $Artifact.digest -cnotmatch '^sha256:[0-9a-f]{64}$') {
+      throw 'Formal artifact metadata invalid'
+    }
+  }
   $ArtifactReady = $Api.total_count -eq 1 -and $A.Count -eq 1 -and `
-    $A[0].name -eq 'precision-Windows-py3.12' -and -not $A[0].expired -and `
-    $A[0].size_in_bytes -gt 0 -and $A[0].digest -match '^sha256:[0-9a-f]{64}$'
+    (Test-JsonInteger $A[0].id) -and $A[0].id -gt 0 -and `
+    $A[0].name -ceq 'precision-Windows-py3.12' -and $A[0].expired -is [bool] -and `
+    $A[0].expired -eq $false -and (Test-JsonInteger $A[0].size_in_bytes) -and `
+    $A[0].size_in_bytes -gt 0 -and $A[0].digest -cmatch '^sha256:[0-9a-f]{64}$'
   if ($ArtifactReady) { break }
   Start-Sleep -Seconds 5
 }
-if ($Api.total_count -ne 1 -or $A.Count -ne 1 -or $A[0].name -ne 'precision-Windows-py3.12' -or $A[0].expired -or $A[0].size_in_bytes -le 0 -or $A[0].digest -notmatch '^sha256:[0-9a-f]{64}$') { throw 'Formal artifact invalid' }
+if ($Api.total_count -eq 0 -and $A.Count -eq 0) {
+  Write-Output 'FORMAL_ARTIFACT_NOT_READY'
+  return
+}
+if ($Api.total_count -ne 1 -or $A.Count -ne 1) { throw 'Formal artifact cardinality invalid' }
 $Dir = Join-Path $ArchiveRoot "$RunId-sgx-hse06-telemetry-stage1-windows-py312"
 if (Test-Path $Dir) { throw "Archive exists: $Dir" }
 New-Item -ItemType Directory $Dir | Out-Null
 $Job = @($Run.jobs)[0]
-$Meta = [ordered]@{run_id=$RunId;run_attempt=$Run.attempt;event=$Run.event;workflow=$Run.workflowName;head_sha=$Run.headSha;head_branch=$Run.headBranch;status=$Run.status;conclusion=$Run.conclusion;job_count=@($Run.jobs).Count;job=[ordered]@{name=$Job.name;status=$Job.status;conclusion=$Job.conclusion};artifact_count=$Api.total_count;artifact=[ordered]@{id=$A[0].id;name=$A[0].name;digest=$A[0].digest;size_in_bytes=$A[0].size_in_bytes;expired=$A[0].expired}}
+$Meta = [ordered]@{databaseId=$RunId;attempt=$Run.attempt;event=$Run.event;workflowName=$Run.workflowName;headSha=$Run.headSha;headBranch=$Run.headBranch;status=$Run.status;conclusion=$Run.conclusion;jobs=@([ordered]@{name=$Job.name;status=$Job.status;conclusion=$Job.conclusion});artifacts=@([ordered]@{id=$A[0].id;name=$A[0].name;digest=$A[0].digest;sizeInBytes=$A[0].size_in_bytes;expired=$A[0].expired})}
 $Utf8 = New-Object Text.UTF8Encoding($false)
 [IO.File]::WriteAllText((Join-Path $Dir 'run-metadata.json'), ($Meta | ConvertTo-Json -Depth 5), $Utf8)
 gh run download $RunId --repo psiQAQ/pyscf --name $A[0].name --dir $Dir
@@ -1260,9 +1563,11 @@ if ((Get-FileHash $ArchivedValidator).Hash.ToLowerInvariant() -ne $V.validator_s
 if ($ValidatorExit -ne 0 -or -not $V.valid) { throw 'Formal evidence INVALID' }
 ```
 
-If the preflight prints `FORMAL_TIMEOUT_CANCELLED`, use `apply_patch` to record elapsed time and timing/infrastructure `INVALID`, then stop without artifact validation or rerun。Otherwise continue with the terminal artifact commands。Do not rerun over a first scientific failure。
+If `FORMAL_ARTIFACT_NOT_READY` is printed after the bounded 60-second API wait, this is upload latency, not `INVALID`。Keep Goal `active`; use `apply_patch` to record the exact run id, observation timestamp, exited monitor PID, and `monitor_next_command: Re-run Task 5.5 for stage1_run_id $RunId without redispatch`, then stop cleanly。
 
-Use `apply_patch` to record run/artifact ids, digest, validator SHA, counts, verdict, first finding, and next command in active doc. Stop rules:
+If the preflight prints `FORMAL_TIMEOUT_CANCELLED`, use `apply_patch` to record exact elapsed time, cancellation result, timing/infrastructure `INVALID`, exited monitor PID, validation timestamp, and the next timing-diagnosis command；then stop without artifact validation or rerun。The PS1 heartbeat only restored Goal for this root-side review and never cancelled the run itself。Otherwise continue with the terminal artifact commands。Do not rerun over a first scientific failure。
+
+Use `apply_patch` to record run/artifact ids, digest, validator SHA, counts, verdict, first finding, exited monitor PID, validation timestamp, and the exact next command in active doc。The PAUSED native automation remains untouched and no PS1 monitor survives while local diagnosis or Stage 2 planning proceeds。This Stage 1 plan does not mark the persistent Goal complete。Stop rules:
 
 - `INVALID`: repair experiment/evidence contract only。
 - `REPRODUCED_OTHER_ASSERTION`: retain evidence; no Extra-cycle conclusion。
@@ -1281,5 +1586,12 @@ Use `apply_patch` to record run/artifact ids, digest, validator SHA, counts, ver
 - [ ] Frozen remote 1-repeat installed-wheel witness passes before the only 200-repeat run is dispatched。
 - [ ] Run/head/job and unique artifact id/name/digest/size/expiry are frozen before download。
 - [ ] Validator automatically checks all records/CSV/logs/runtime/DLL/pip/schema/formulas/nonconvergence; valid scientific failure remains valid evidence。
-- [ ] Exactly one 15/30-minute heartbeat while waiting; exact 300-minute cancel gate。
+- [ ] Native automation remains exact `PAUSED` and current-thread ACTIVE automation count remains zero；exactly one audited hidden PS1 heartbeat runs at a time, at a 1,800-second interval, with no manual/`gh run watch` second poller。
+- [ ] Every dispatch rechecks the frozen local/doc/remote head, validator SHA, Goal-bridge SHA/AST/self-test, PAUSED native metadata, ACTIVE count zero, and zero local pollers；the exact run id is persisted before the PS1 launch。
+- [ ] A delayed run id uses the persisted `BeforeMax` plus exact head in the fresh-shell recovery block and never redispatches or guesses “latest”；queued/zero-job handling belongs only to the audited PS1 loop。
+- [ ] PS1 binds only the exact run/head, pauses Goal only after acquiring its mutex, restores Goal on terminal/fail-closed/300-minute review, and never downloads, validates, dispatches, reruns, or cancels CI。
+- [ ] A terminal run with no complete artifact metadata after 60 seconds keeps Goal active for an exact-run retry；only multiple or malformed complete artifact metadata is `INVALID`。
+- [ ] Root revalidates full formal run/head/branch/workflow/one-precision-job identity and parseable `startedAt >= 300 minutes` before timeout cancel。
+- [ ] Witness/formal terminal, diagnostic, or timeout leaves Goal active and the recorded PS1 PID exited；Stage 1 never marks the persistent Goal complete。
+- [ ] After all three nodeids have maintainable terminal resolutions and `pyscf/pyscf#3312` is updated, verify native automation is still PAUSED and no PS1 monitor survives；do not edit scheduler TOML/SQLite。
 - [ ] No PR, no complete matrix, no Stage 2 code, and no PASS/FIXED claim from `0/200`。
