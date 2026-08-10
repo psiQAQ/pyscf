@@ -60,6 +60,17 @@ def write_runtime_snapshot(
 
 
 class PrecisionInvestigationContractTest(unittest.TestCase):
+    def test_sgx_hse06_telemetry_selection(self):
+        runner = load_runner()
+        selection = (
+            ROOT / '.github/workflows/'
+            'precision-libxc-712-sgx-hse06-telemetry-nodeids.txt'
+        )
+        self.assertEqual(runner.load_nodeids(selection), [
+            'pyscf/sgx/grad/test/test_rks.py::KnownValues::'
+            'test_finite_diff_grad_settings2_hse06_telemetry',
+        ])
+
     def test_template_selection_is_empty_and_catalogs_unresolved_families(self):
         selection = read('.github/workflows/precision-selected-nodeids.txt')
         active = [
