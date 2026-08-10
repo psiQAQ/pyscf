@@ -10,6 +10,7 @@ from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
+SGX_HSE06_TELEMETRY_PREFIX = 'PYSCF_SGX_HSE06_TELEMETRY_V1 '
 
 
 def read(relative_path):
@@ -396,8 +397,31 @@ class PrecisionInvestigationContractTest(unittest.TestCase):
             (package / '__init__.py').write_text(
                 "__version__ = 'source-tree'\n", encoding='utf-8'
             )
+            payload = {
+                'schema_version': 1,
+                'case': {
+                    'settings_index': 2,
+                    'settings': [True, True, True, True, True],
+                    'precision': 6,
+                    'xc': 'HSE06',
+                    'delta': 1e-4,
+                    'translation_places': 12,
+                    'finite_difference_places': 6,
+                },
+                'result': {
+                    'translation_assertion_pass': True,
+                    'finite_difference_post_pass': False,
+                },
+            }
             (root / 'test_sample.py').write_text(
-                'def test_failure():\n    assert False\n', encoding='utf-8'
+                'import json\n'
+                f'PREFIX = {SGX_HSE06_TELEMETRY_PREFIX!r}\n'
+                f'PAYLOAD = {payload!r}\n'
+                'def test_failure():\n'
+                '    print(flush=True)\n'
+                '    print(PREFIX + json.dumps(PAYLOAD), flush=True)\n'
+                '    assert False\n',
+                encoding='utf-8',
             )
             nodeids = root / 'nodeids.txt'
             nodeids.write_text(
@@ -448,6 +472,33 @@ class PrecisionInvestigationContractTest(unittest.TestCase):
                 'log_file', 'environment_file', 'nodeids_file'
             ):
                 self.assertTrue((output / records[0][field]).is_file())
+            attempt_log = (
+                output / records[0]['log_file']
+            ).read_text(encoding='utf-8')
+            markers = [
+                line for line in attempt_log.splitlines()
+                if line.startswith(SGX_HSE06_TELEMETRY_PREFIX)
+            ]
+            self.assertEqual(len(markers), 1)
+            self.assertEqual(
+                json.loads(markers[0][len(SGX_HSE06_TELEMETRY_PREFIX):]),
+                {
+                    'schema_version': 1,
+                    'case': {
+                        'settings_index': 2,
+                        'settings': [True, True, True, True, True],
+                        'precision': 6,
+                        'xc': 'HSE06',
+                        'delta': 1e-4,
+                        'translation_places': 12,
+                        'finite_difference_places': 6,
+                    },
+                    'result': {
+                        'translation_assertion_pass': True,
+                        'finite_difference_post_pass': False,
+                    },
+                },
+            )
             self.assertTrue((output / 'summary.csv').is_file())
             self.assertTrue((output / 'summary.md').is_file())
 
