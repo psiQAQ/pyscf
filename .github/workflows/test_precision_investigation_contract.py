@@ -10,7 +10,9 @@ from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SGX_HSE06_TELEMETRY_PREFIX = 'PYSCF_SGX_HSE06_TELEMETRY_V1 '
+SGX_HSE06_TELEMETRY_PREFIX = (
+    'PYSCF_SGX_HSE06_POST_KERNEL_TELEMETRY_V2 '
+)
 
 
 def read(relative_path):
@@ -409,7 +411,12 @@ class PrecisionInvestigationContractTest(unittest.TestCase):
                 "__version__ = 'source-tree'\n", encoding='utf-8'
             )
             payload = {
-                'schema_version': 1,
+                'schema_version': 2,
+                'instrumentation': {
+                    'mode': 'post_kernel_once_per_phase',
+                    'per_cycle_callback': False,
+                    'expected_phase_count': 3,
+                },
                 'case': {
                     'settings_index': 2,
                     'settings': [True, True, True, True, True],
@@ -491,10 +498,16 @@ class PrecisionInvestigationContractTest(unittest.TestCase):
                 if line.startswith(SGX_HSE06_TELEMETRY_PREFIX)
             ]
             self.assertEqual(len(markers), 1)
+            expected_instrumentation = {
+                'mode': 'post_kernel_once_per_phase',
+                'per_cycle_callback': False,
+                'expected_phase_count': 3,
+            }
             self.assertEqual(
                 json.loads(markers[0][len(SGX_HSE06_TELEMETRY_PREFIX):]),
                 {
-                    'schema_version': 1,
+                    'schema_version': 2,
+                    'instrumentation': expected_instrumentation,
                     'case': {
                         'settings_index': 2,
                         'settings': [True, True, True, True, True],
