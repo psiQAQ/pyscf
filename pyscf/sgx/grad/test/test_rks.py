@@ -56,6 +56,115 @@ def tearDownModule():
     del mol
 
 
+def _run_with_post_kernel_snapshot(
+        owner, phase, snapshots, operation, snapshotter, *args, **kwargs):
+    had_shadow = 'post_kernel' in owner.__dict__
+    previous_shadow = owner.__dict__.get('post_kernel')
+    original = owner.post_kernel
+    calls = 0
+
+    def wrapped(envs):
+        nonlocal calls
+        original(envs)
+        calls += 1
+        if calls != 1:
+            raise RuntimeError('post_kernel must be called exactly once')
+        snapshots[phase] = snapshotter(envs)
+
+    owner.post_kernel = wrapped
+    try:
+        result = operation(*args, **kwargs)
+        if calls != 1:
+            raise RuntimeError('post_kernel must be called exactly once')
+        return result
+    finally:
+        if had_shadow:
+            owner.__dict__['post_kernel'] = previous_shadow
+        else:
+            owner.__dict__.pop('post_kernel', None)
+
+
+class PostKernelSnapshotTest(unittest.TestCase):
+    class Owner:
+        def __init__(self):
+            self.events = []
+
+        def post_kernel(self, envs):
+            self.events.append('original')
+
+    def test_calls_original_before_snapshot_and_restores_class_lookup(self):
+        owner = self.Owner()
+        snapshots = {}
+        envs = {}
+
+        def snapshotter(value):
+            owner.events.append('snapshot')
+            self.assertIs(value, envs)
+            return {'value': 1}
+
+        def operation():
+            owner.post_kernel(envs)
+            return 'result'
+
+        result = _run_with_post_kernel_snapshot(
+            owner, 'base', snapshots, operation, snapshotter)
+        self.assertEqual(result, 'result')
+        self.assertEqual(owner.events, ['original', 'snapshot'])
+        self.assertEqual(snapshots, {'base': {'value': 1}})
+        self.assertNotIn('post_kernel', owner.__dict__)
+
+    def test_restores_after_operation_error(self):
+        owner = self.Owner()
+        with self.assertRaisesRegex(ValueError, 'operation'):
+            _run_with_post_kernel_snapshot(
+                owner, 'base', {},
+                lambda: (_ for _ in ()).throw(ValueError('operation')),
+                lambda envs: {})
+        self.assertNotIn('post_kernel', owner.__dict__)
+
+    def test_restores_after_snapshot_error(self):
+        owner = self.Owner()
+
+        def operation():
+            owner.post_kernel({})
+
+        with self.assertRaisesRegex(ValueError, 'snapshot'):
+            _run_with_post_kernel_snapshot(
+                owner, 'base', {}, operation,
+                lambda envs: (_ for _ in ()).throw(ValueError('snapshot')))
+        self.assertEqual(owner.events, ['original'])
+        self.assertNotIn('post_kernel', owner.__dict__)
+
+    def test_restores_existing_instance_shadow(self):
+        owner = self.Owner()
+        shadow = lambda envs: owner.events.append('shadow')
+        owner.post_kernel = shadow
+
+        def operation():
+            owner.post_kernel({})
+
+        _run_with_post_kernel_snapshot(
+            owner, 'plus', {}, operation, lambda envs: {})
+        self.assertIs(owner.__dict__['post_kernel'], shadow)
+        self.assertEqual(owner.events, ['shadow'])
+
+    def test_rejects_zero_or_multiple_post_kernel_calls(self):
+        owner = self.Owner()
+        with self.assertRaisesRegex(RuntimeError, 'exactly once'):
+            _run_with_post_kernel_snapshot(
+                owner, 'base', {}, lambda: None, lambda envs: {})
+        self.assertNotIn('post_kernel', owner.__dict__)
+
+        def twice():
+            owner.post_kernel({})
+            owner.post_kernel({})
+
+        with self.assertRaisesRegex(RuntimeError, 'exactly once'):
+            _run_with_post_kernel_snapshot(
+                owner, 'base', {}, twice, lambda envs: {})
+        self.assertNotIn('post_kernel', owner.__dict__)
+
+
 class KnownValues(unittest.TestCase):
 
     def _check_finite_diff_grad(
