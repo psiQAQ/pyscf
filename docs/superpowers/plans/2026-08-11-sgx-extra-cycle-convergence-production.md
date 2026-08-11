@@ -1292,7 +1292,7 @@ $ActiveText = [IO.File]::ReadAllText(
 $HeadMatches = [regex]::Matches(
   $ActiveText, '(?m)^- production_validation_head: `([0-9a-f]{40})`$')
 $WitnessMatches = [regex]::Matches(
-  $ActiveText, '(?m)^- production_witness_verdict: `PASS`$')
+  $ActiveText, '(?m)^- production_witness_verdict: PASS$')
 if ($HeadMatches.Count -ne 1 -or $WitnessMatches.Count -ne 1) {
   throw 'Formal gate is not frozen as one validated witness head'
 }
@@ -1434,9 +1434,9 @@ $Text = [IO.File]::ReadAllText($ActiveDoc, [Text.UTF8Encoding]::new($false))
 $HeadMatches = [regex]::Matches(
   $Text, '(?m)^- production_validation_head: `([0-9a-f]{40})`$')
 $WitnessMatches = [regex]::Matches(
-  $Text, '(?m)^- production_witness_verdict: `PASS`$')
+  $Text, '(?m)^- production_witness_verdict: PASS$')
 $FormalMatches = [regex]::Matches(
-  $Text, '(?m)^- production_sgx_formal_verdict: `PASS`$')
+  $Text, '(?m)^- production_sgx_formal_verdict: PASS$')
 if ($HeadMatches.Count -ne 1 -or $WitnessMatches.Count -ne 1 -or
     $FormalMatches.Count -ne 1) { throw 'Focused UHF gate is not frozen' }
 $Head = $HeadMatches[0].Groups[1].Value
