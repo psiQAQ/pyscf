@@ -229,6 +229,12 @@ class _SGXHF:
                 if haslock is None:
                     self._ctx_lock = None
 
+    def check_convergence(self, envs):
+        energy_converged = (
+            abs(envs['e_tot'] - envs['last_hf_e']) < envs['conv_tol'])
+        gradient_converged = envs['norm_gorb'] < envs['conv_tol_grad']
+        return energy_converged and gradient_converged
+
     def post_kernel(self, envs):
         self._in_scf = False
 
