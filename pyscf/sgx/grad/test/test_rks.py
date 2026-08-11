@@ -5,7 +5,7 @@ import numpy
 import unittest
 
 
-TELEMETRY_PREFIX = 'PYSCF_SGX_HSE06_TELEMETRY_V1 '
+TELEMETRY_PREFIX = 'PYSCF_SGX_HSE06_POST_KERNEL_TELEMETRY_V2 '
 
 
 ALL_SETTINGS = [
@@ -54,6 +54,37 @@ def tearDownModule():
     global mol
     mol.stdout.close()
     del mol
+
+
+def _snapshot_post_kernel(envs):
+    configured_conv_tol = float(envs['mf'].conv_tol)
+    effective_conv_tol = float(envs['conv_tol'])
+    conv_check = bool(envs['conv_check'])
+    extra_executed = (
+        conv_check
+        and effective_conv_tol == configured_conv_tol * 10
+    )
+    post_energy = float(envs['e_tot'])
+    if extra_executed:
+        pre_extra_energy = float(envs['last_hf_e'])
+        extra_shift = post_energy - pre_extra_energy
+    else:
+        pre_extra_energy = None
+        extra_shift = None
+    return {
+        'cycle': int(envs['cycle']) + 1,
+        'configured_conv_tol': configured_conv_tol,
+        'effective_conv_tol': effective_conv_tol,
+        'effective_conv_tol_grad': float(envs['conv_tol_grad']),
+        'conv_check': conv_check,
+        'extra_executed': extra_executed,
+        'pre_extra_energy': pre_extra_energy,
+        'post_energy': post_energy,
+        'extra_shift': extra_shift,
+        'final_converged': bool(envs['scf_conv']),
+        'final_norm_gorb': float(envs['norm_gorb']),
+        'final_norm_ddm': float(envs['norm_ddm']),
+    }
 
 
 def _run_with_post_kernel_snapshot(
@@ -171,76 +202,71 @@ class KnownValues(unittest.TestCase):
             self, df_settings, order, xc, *, telemetry=False):
         mf = sgx_fit(scf.RKS(mol).set(xc=xc))
         _set_df_args(mf, *df_settings)
-        phase = 'base'
-        main_cycles = {}
-        post = {}
+        snapshots = {}
+        gradient = mf.nuc_grad_method().set(
+            sgx_grid_response=True, grid_response=True)
         if telemetry:
-            def snapshot_main_cycle(envs):
-                main_cycles[phase] = {
-                    'cycle': int(envs['cycle']) + 1,
-                    'e_tot': float(envs['e_tot']),
-                    'last_hf_e': float(envs['last_hf_e']),
-                    'delta_e': float(envs['e_tot'] - envs['last_hf_e']),
-                    'norm_gorb': float(envs['norm_gorb']),
-                    'norm_ddm': float(envs['norm_ddm']),
-                    'scf_conv': bool(envs['scf_conv']),
-                    'conv_tol': float(envs['conv_tol']),
-                    'conv_tol_grad': float(envs['conv_tol_grad']),
-                    'conv_check': bool(envs['conv_check']),
-                }
-            mf.callback = snapshot_main_cycle
+            g = _run_with_post_kernel_snapshot(
+                mf, 'base', snapshots, gradient.kernel,
+                _snapshot_post_kernel)
+        else:
+            g = gradient.kernel()
 
-        g = mf.nuc_grad_method().set(
-            sgx_grid_response=True, grid_response=True).kernel()
-        if telemetry:
-            post['base'] = (float(mf.e_tot), bool(mf.converged))
         mol1 = mol.copy()
         mf_scanner = mf.as_scanner()
         delta = 1e-4
+        plus_mol = mol1.set_geom_(
+            f'O  0. 0. {delta:f}; 1  0. -0.757 0.587; 1  0. 0.757 0.587')
         if telemetry:
-            phase = 'plus'
-        e1 = mf_scanner(mol1.set_geom_(
-            f'O  0. 0. {delta:f}; 1  0. -0.757 0.587; 1  0. 0.757 0.587'
-        ))
-        if telemetry:
-            post['plus'] = (float(e1), bool(mf_scanner.converged))
-            phase = 'minus'
-        e2 = mf_scanner(mol1.set_geom_(
-            f'O  0. 0. -{delta:f}; 1  0. -0.757 0.587; 1  0. 0.757 0.587'
-        ))
-        if telemetry:
-            post['minus'] = (float(e2), bool(mf_scanner.converged))
-            phases = {}
-            for name in ('base', 'plus', 'minus'):
-                main = main_cycles[name]
-                post_energy, post_converged = post[name]
-                extra_executed = main['scf_conv'] and main['conv_check']
-                phases[name] = {
-                    'main': main,
-                    'post_energy': post_energy,
-                    'post_converged': post_converged,
-                    'extra_executed': extra_executed,
-                    'extra_shift': (
-                        post_energy - main['e_tot']
-                        if extra_executed else None),
-                }
+            e1 = _run_with_post_kernel_snapshot(
+                mf_scanner, 'plus', snapshots, mf_scanner,
+                _snapshot_post_kernel, plus_mol)
+        else:
+            e1 = mf_scanner(plus_mol)
 
+        minus_mol = mol1.set_geom_(
+            f'O  0. 0. -{delta:f}; 1  0. -0.757 0.587; 1  0. 0.757 0.587')
+        if telemetry:
+            e2 = _run_with_post_kernel_snapshot(
+                mf_scanner, 'minus', snapshots, mf_scanner,
+                _snapshot_post_kernel, minus_mol)
+        else:
+            e2 = mf_scanner(minus_mol)
+
+        if telemetry:
+            if set(snapshots) != {'base', 'plus', 'minus'}:
+                raise RuntimeError('post_kernel snapshots are incomplete')
             analytic_gradient = float(g[0,2])
             translation_l1 = float(numpy.abs(g.sum(axis=0)).sum())
-            plus_main = main_cycles['plus']['e_tot']
-            minus_main = main_cycles['minus']['e_tot']
-            fd_pre = (plus_main - minus_main) / (2 * delta) * lib.param.BOHR
             fd_post = (e1 - e2) / (2 * delta) * lib.param.BOHR
-            error_pre = analytic_gradient - fd_pre
             error_post = analytic_gradient - fd_post
-            extra_contribution = fd_post - fd_pre
-            closure_residual = error_post - (
-                error_pre - extra_contribution)
-            translation_pass = bool(round(abs(translation_l1), 12) == 0)
-            pre_pass = bool(round(abs(error_pre), 6) == 0)
-            post_pass = bool(round(abs(error_post), 6) == 0)
+            if (snapshots['plus']['extra_executed']
+                    and snapshots['minus']['extra_executed']):
+                fd_pre = (
+                    snapshots['plus']['pre_extra_energy']
+                    - snapshots['minus']['pre_extra_energy']
+                ) / (2 * delta) * lib.param.BOHR
+                error_pre = analytic_gradient - fd_pre
+                extra_contribution = (
+                    snapshots['plus']['extra_shift']
+                    - snapshots['minus']['extra_shift']
+                ) / (2 * delta) * lib.param.BOHR
+                reconstruction_residual = (
+                    fd_post - fd_pre - extra_contribution)
+                pre_pass = bool(round(abs(error_pre), 6) == 0)
+            else:
+                fd_pre = None
+                error_pre = None
+                extra_contribution = None
+                reconstruction_residual = None
+                pre_pass = None
             payload = {
-                'schema_version': 1,
+                'schema_version': 2,
+                'instrumentation': {
+                    'mode': 'post_kernel_once_per_phase',
+                    'per_cycle_callback': False,
+                    'expected_phase_count': 3,
+                },
                 'case': {
                     'settings_index': 2,
                     'settings': [True, True, True, True, True],
@@ -255,19 +281,21 @@ class KnownValues(unittest.TestCase):
                     'gradient': 'Hartree/Bohr',
                     'displacement': 'Angstrom',
                 },
-                'phases': phases,
+                'phases': snapshots,
                 'result': {
                     'analytic_gradient': analytic_gradient,
                     'translation_l1': translation_l1,
-                    'translation_assertion_pass': translation_pass,
+                    'translation_assertion_pass': bool(
+                        round(abs(translation_l1), 12) == 0),
                     'finite_difference_pre': fd_pre,
                     'finite_difference_post': fd_post,
                     'gradient_error_pre': error_pre,
                     'gradient_error_post': error_post,
                     'finite_difference_pre_pass': pre_pass,
-                    'finite_difference_post_pass': post_pass,
+                    'finite_difference_post_pass': bool(
+                        round(abs(error_post), 6) == 0),
                     'extra_contribution': extra_contribution,
-                    'closure_residual': closure_residual,
+                    'reconstruction_residual': reconstruction_residual,
                 },
             }
             print(TELEMETRY_PREFIX + json.dumps(
