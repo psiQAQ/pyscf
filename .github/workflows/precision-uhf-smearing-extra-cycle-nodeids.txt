@@ -1,0 +1,1 @@
+pyscf/scf/test/test_addons.py::KnownValues::test_uhf_smearing
