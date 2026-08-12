@@ -248,16 +248,17 @@ argv 必须证明 wrapper 仍调用 exact
 
 ### 平台验证
 
-同一测试代码必须通过以下边界，不维护按平台分叉的 expected behavior：
+push 前的平台门禁仅在本机 Windows 的 MSYS/Git Bash 上运行完整四案例合同和
+普通静态检查。四案例包括目录预创建、预建目录下 runner `0`/`23`、output path
+为普通文件，以及 exit path 为目录；不得用 WSL、`cmd.exe`、`shell=True`、
+PowerShell 模拟 Bash 或字符串 grep 代替真实 wrapper 子进程。MSYS 路径差异只允许
+通过收紧临时路径和 argv 规范化处理，不允许降低目录预创建、调用次数、退出码、
+sentinel 或文件字节断言。
 
-1. Linux Bash；
-2. macOS Bash；
-3. 本机 Windows 的 MSYS/Git Bash。
-
-Linux/macOS 的 Bash lookup 或任一平台的 `resolve_bash()` probe 失败都必须明确
-失败，而不是静默 skip。测试不使用 WSL、`cmd.exe`、`shell=True` 或 PowerShell
-模拟 Bash。若 MSYS 路径仍发生转换差异，只允许收紧测试临时路径/argv 规范化，
-不允许降低目录预创建、调用次数、退出码、sentinel 或文件字节断言。
+实现代码仍保持 Linux/macOS 与 Windows/MSYS 共用的行为合同和 `resolve_bash()`
+分支，但本地没有原生 Linux/macOS host。因此 push 前无需、也不得声称已经运行或
+通过原生 Linux/macOS contract test。真实 Unix 边界由 push 后的 macOS witness
+artifact 提供直接证据，而不是由未执行的本地平台测试推断。
 
 ## 部署与重新取证
 
@@ -270,10 +271,38 @@ evidence commit 叠加在该 head 上，diff 恰好包含 Unix wrapper 与其 co
 test 两个文件。不得混入 scientific source、nodeid selection、validator、workflow、
 heartbeat、文档或 archive 修改。
 
-在本机 MSYS Bash、目标 Linux/macOS contract tests 和普通静态检查全部通过后，
-先独立 review commit 与 RED/GREEN 证据；只有 review 接受并获得既有远端权限后，
-才把 validation branch 推到新 head。不得 force-push、改写旧 commit 或把 evidence
-commit 合并进科学修复 commit。
+在本机 MSYS Bash 完整四案例合同、完整 contract test、Bash/Python 静态门禁、
+encoding/EOL/mode/scope 检查全部通过后，先独立 review commit 与 RED/GREEN
+证据。只有 review 接受并获得既有远端权限后，才以普通 fast-forward push 把同一
+validation branch 更新到新 head。不得 force-push、改写旧 commit 或把 evidence
+commit 合并进科学修复 commit；push 前不要求原生 Linux/macOS test evidence。
+
+### push 后 macOS wrapper witness
+
+普通 fast-forward push 新 head 后，先且只先派发一条 macOS wrapper witness：
+
+- nodeid：`pyscf/scf/test/test_addons.py::KnownValues::test_uhf_smearing`
+- repeats：`1`
+- platform：`macos-latest`
+- Python：`3.12`
+- profile：`4/4`（validator profile `omp4-blas4`）
+- artifact：`precision-macOS-py3.12`
+- evidence mode：`source-tree`
+- expected native library count：`16`
+
+该 witness 必须通过独立 immutable latch/binding 绑定唯一 run ID，并严格验证
+attempt 1、`workflow_dispatch`、workflow/branch/head、唯一 `precision` job、唯一
+artifact、exact inputs、runtime LibXC、checkout/source-tree provenance、macOS
+`otool -L` linkage、16 项 native inventory，以及字节精确的
+`runner-exit-code.txt == b'0\n'`。冻结 validator 必须返回 `valid=true` 和 plain
+`PASS`。Actions/job success、单条 pytest pass 或 artifact 存在都不能代替 strict
+validator。
+
+macOS witness 只证明新 SHA 上真实 Unix wrapper 的成功路径、退出码持久化和
+source/native provenance 可归档；`repeats=1` 不是 UHF 科学稳定性结论，也不替代
+后续 Ubuntu 20-repeat evidence。只有该 witness strict `PASS` 后，才解锁下面的
+Windows+Ubuntu pair dispatch；witness failure 或 `INVALID` 必须保留证据并停止，
+不得提前派发 pair。
 
 ### 同一新 SHA 的正式复跑
 
@@ -312,6 +341,8 @@ run `31548408412` 的 20/20 advisory 重新解释为有效。
 - 新 dispatch 已被 latch 记录但当前 shell 中断时，只按同一 latch、binding 和
   exact run ID 恢复；不得重放 `gh workflow run`。artifact latency 只重查同一 run，
   不触发新 run。
+- macOS witness 已 dispatch 后只恢复其 exact run ID；不得为了等待或 artifact
+  latency 重放 witness。witness strict `PASS` 前不得创建 Windows/Linux pair latch。
 - 任一新 run 失败或 INVALID 时，保留第一份有效失败证据，停止 Step 3；修复后
   使用另一个新 SHA 和新的 immutable dispatch identity，不覆盖本轮 archive。
 
@@ -360,13 +391,18 @@ runner 的原始退出状态。该方案会错误地使现有 Linux artifact 看
    directory case 验证 wrapper 非零、fake 调用 `1` 次、sentinel 保留且没有 ordinary
    exit file；
 5. `resolve_bash()` 在 Windows 从 `git.exe` 安装根选择 MSYS Bash 并拒绝
-   System32/WSL shim；行为测试在 Linux、macOS 与本机 MSYS Bash 边界通过，不以
-   文本 grep 代替执行；
+   System32/WSL shim；push 前本机 MSYS Bash 的完整四案例合同通过，不以文本 grep
+   代替执行，也不声称未执行的原生 Linux/macOS test 已通过；
 6. implementation commit 在 `2eb90e3f99219e28390570d13bd906cfe6e17012`
-   之上独立 review 后形成新 validation head；
-7. 新 Windows 与 Ubuntu runs 使用同一新 SHA、singleton/20/Python 3.12/4/4，
-   由唯一 heartbeat 管理；
-8. Windows installed-wheel/native-26 与 Linux source-tree/native-16 artifact 均
+   之上完成 Windows/MSYS 门禁和独立 review，再以普通 fast-forward push 形成新
+   validation head；
+7. push 后 macOS singleton/1/Python 3.12/4/4 witness 先通过冻结 validator：artifact
+   含 exact `runner-exit-code.txt == b'0\n'`、source-tree/native-16/provenance，且该
+   witness 只作为 wrapper transport 证据，不表述为科学稳定性结论；
+8. macOS witness strict `PASS` 后，新 Windows 与 Ubuntu runs 才使用同一新 SHA、
+   singleton/20/Python 3.12/4/4 由唯一 heartbeat 管理；
+9. Windows installed-wheel/native-26 与 Linux source-tree/native-16 artifact 均
    通过冻结 strict validator，报告 `valid=true`、`PASS`；
-9. 旧 archives 未改变、无 dispatch replay、无第二 poller、无提前更新 #3312；
-10. 两个新 PASS 之前 Task 7 Step 3 始终保持暂停。
+10. 旧 archives 未改变、无 dispatch replay、无第二 poller、无提前更新 #3312；
+11. macOS witness 与 Windows/Linux 两个新 PASS 全部满足之前，Task 7 Step 3 始终
+    保持暂停。
