@@ -8,7 +8,9 @@ profile=${3:?profile is required}
 output_dir=${4:-tmp/precision-results}
 repo_root=$(cd "$(dirname "$0")/../.." && pwd)
 
-python "$repo_root/.github/workflows/run_precision_tests.py" \
+mkdir -p "$output_dir"
+runner_exit=0
+if python "$repo_root/.github/workflows/run_precision_tests.py" \
   --nodeids-file "$nodeids_file" \
   --repeats "$repeats" \
   --profile "$profile" \
@@ -18,4 +20,10 @@ python "$repo_root/.github/workflows/run_precision_tests.py" \
   --rootdir "$repo_root" \
   --pytest-config "$repo_root/pytest.ini" \
   --environment-mode source-tree \
-  --collector "$repo_root/.github/workflows/collect_precision_environment.py"
+  --collector "$repo_root/.github/workflows/collect_precision_environment.py"; then
+  runner_exit=0
+else
+  runner_exit=$?
+fi
+printf '%s\n' "$runner_exit" > "$output_dir/runner-exit-code.txt"
+exit "$runner_exit"
