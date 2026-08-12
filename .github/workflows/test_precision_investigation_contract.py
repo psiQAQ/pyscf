@@ -1,6 +1,10 @@
+import contextlib
 import importlib.util
 import json
+import os
 from pathlib import Path
+import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -10,6 +14,185 @@ from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+FAKE_PYTHON = r'''#!/usr/bin/env bash
+set -euo pipefail
+: "${FAKE_INVOCATION_RECORD:?}"
+: "${FAKE_PYTHON_EXIT:?}"
+printf '%s\0' '__CALL__' "$@" >> "$FAKE_INVOCATION_RECORD"
+output_count=0
+output_dir=
+while (($#)); do
+  if [[ "$1" == '--output-dir' ]]; then
+    output_count=$((output_count + 1))
+    shift
+    (($#)) || exit 96
+    output_dir=$1
+  fi
+  shift
+done
+((output_count == 1)) || exit 96
+[[ -d "$output_dir" ]] || exit 97
+printf '%s\n' 'fake evidence sentinel' > "$output_dir/fake-evidence.txt"
+exit "$FAKE_PYTHON_EXIT"
+'''
+
+
+def _is_within(path, parent):
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True
+
+
+def _probe_bash(candidate, require_msys):
+    candidate = Path(candidate).resolve(strict=True)
+    if not candidate.is_file() or not os.access(candidate, os.X_OK):
+        raise RuntimeError(f'Bash is not an executable file: {candidate}')
+    result = subprocess.run(
+        [str(candidate), '--version'], capture_output=True, text=True,
+        shell=False,
+    )
+    version = (result.stdout + result.stderr).casefold()
+    if result.returncode != 0 or 'gnu bash' not in version:
+        raise RuntimeError(f'GNU Bash probe failed: {candidate}')
+    if require_msys and 'msys' not in version:
+        raise RuntimeError(f'MSYS Bash is required on Windows: {candidate}')
+    return candidate
+
+
+def resolve_bash():
+    if sys.platform == 'win32':
+        discovered_git = shutil.which('git')
+        if discovered_git is None:
+            raise RuntimeError('git.exe is required to locate MSYS Bash')
+        git_path = Path(discovered_git).resolve(strict=True)
+        if git_path.name.casefold() != 'git.exe':
+            raise RuntimeError(f'Expected git.exe, got {git_path}')
+        if not git_path.is_file() or not os.access(git_path, os.X_OK):
+            raise RuntimeError(f'git.exe is not executable: {git_path}')
+        if git_path.parent.name.casefold() not in ('cmd', 'bin'):
+            raise RuntimeError(f'Unexpected Git installation layout: {git_path}')
+        system_root = Path(os.environ['SystemRoot']).resolve(strict=True)
+        system32 = (system_root / 'System32').resolve(strict=True)
+        if _is_within(git_path, system32):
+            raise RuntimeError('System32 git.exe is forbidden')
+        bash_path = (git_path.parent.parent / 'bin/bash.exe').resolve(strict=True)
+        if _is_within(bash_path, system32):
+            raise RuntimeError('System32/WSL Bash compatibility shim is forbidden')
+        return _probe_bash(bash_path, require_msys=True)
+    if sys.platform not in ('linux', 'darwin'):
+        raise RuntimeError(f'Unsupported contract-test platform: {sys.platform}')
+    discovered_bash = shutil.which('bash')
+    if discovered_bash is None:
+        raise RuntimeError('GNU Bash is required')
+    return _probe_bash(discovered_bash, require_msys=False)
+
+
+@contextlib.contextmanager
+def unix_wrapper_case(fake_exit, output_kind, exit_path_directory=False):
+    tmp_parent = ROOT / 'tmp'
+    tmp_parent.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=tmp_parent) as tmpdir:
+        case_root = Path(tmpdir)
+        case_rel = case_root.relative_to(ROOT).as_posix()
+        bin_dir = case_root / 'bin'
+        bin_dir.mkdir()
+        fake_python = bin_dir / 'python'
+        fake_python.write_bytes(FAKE_PYTHON.encode('utf-8'))
+        fake_bytes = fake_python.read_bytes()
+        if b'\x00' in fake_bytes:
+            raise AssertionError('fake python contains an embedded NUL')
+        if b"printf '%s\\0' '__CALL__' \"$@\"" not in fake_bytes:
+            raise AssertionError('fake python lost the literal NUL escape')
+        if b"printf '%s\\n' 'fake evidence sentinel'" not in fake_bytes:
+            raise AssertionError('fake python lost the literal LF escape')
+        fake_python.chmod(
+            fake_python.stat().st_mode
+            | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+        )
+        nodeids = case_root / 'nodeids.txt'
+        nodeids.write_bytes(
+            b'pyscf/scf/test/test_addons.py::KnownValues::test_uhf_smearing\n'
+        )
+        output = case_root / 'output'
+        if output_kind == 'directory':
+            output.mkdir()
+        elif output_kind == 'file':
+            output.write_bytes(b'not a directory\n')
+        elif output_kind != 'missing':
+            raise AssertionError(f'unknown output kind: {output_kind}')
+        if exit_path_directory:
+            if not output.is_dir():
+                raise AssertionError(
+                    'exit-path directory needs an output directory'
+                )
+            (output / 'runner-exit-code.txt').mkdir()
+        invocation_record = case_root / 'invocations.bin'
+        env = os.environ.copy()
+        env['PATH'] = str(bin_dir) + os.pathsep + env['PATH']
+        env['GITHUB_SHA'] = 'a' * 40
+        env['FAKE_PYTHON_EXIT'] = str(fake_exit)
+        env['FAKE_INVOCATION_RECORD'] = (
+            f'{case_rel}/invocations.bin'
+        )
+        command = [
+            str(resolve_bash()),
+            '.github/workflows/run_unix_precision_tests.sh',
+            f'{case_rel}/nodeids.txt',
+            '1',
+            '4/4',
+            f'{case_rel}/output',
+        ]
+        result = subprocess.run(
+            command, cwd=ROOT, env=env, capture_output=True, text=True,
+            shell=False,
+        )
+        raw = invocation_record.read_bytes() if invocation_record.exists() else b''
+        fields = raw.split(b'\0')
+        if fields and fields[-1] == b'':
+            fields.pop()
+        calls = fields.count(b'__CALL__')
+        argv = [field.decode('utf-8') for field in fields[1:]] if calls == 1 else []
+        yield SimpleNamespace(
+            result=result, calls=calls, argv=argv, output=output,
+            exit_path=output / 'runner-exit-code.txt',
+            sentinel=output / 'fake-evidence.txt',
+            nodeids=f'{case_rel}/nodeids.txt',
+            output_arg=f'{case_rel}/output',
+        )
+
+
+def assert_exact_fake_argv(test_case, case):
+    test_case.assertEqual(case.calls, 1)
+    test_case.assertEqual(case.argv.count('--output-dir'), 1)
+    pairs = dict(zip(case.argv[1::2], case.argv[2::2]))
+    test_case.assertTrue(
+        case.argv[0].replace('\\', '/').endswith(
+            '/.github/workflows/run_precision_tests.py'
+        )
+    )
+    test_case.assertEqual(pairs['--nodeids-file'], case.nodeids)
+    test_case.assertEqual(pairs['--repeats'], '1')
+    test_case.assertEqual(pairs['--profile'], '4/4')
+    test_case.assertEqual(pairs['--output-dir'], case.output_arg)
+    test_case.assertEqual(pairs['--tested-sha'], 'a' * 40)
+    test_case.assertEqual(pairs['--working-directory'], pairs['--rootdir'])
+    root = pairs['--rootdir'].replace('\\', '/').rstrip('/')
+    test_case.assertEqual(
+        case.argv[0].replace('\\', '/'),
+        root + '/.github/workflows/run_precision_tests.py',
+    )
+    test_case.assertEqual(
+        pairs['--pytest-config'].replace('\\', '/'), root + '/pytest.ini'
+    )
+    test_case.assertEqual(pairs['--environment-mode'], 'source-tree')
+    test_case.assertEqual(
+        pairs['--collector'].replace('\\', '/'),
+        root + '/.github/workflows/collect_precision_environment.py',
+    )
 
 
 def read(relative_path):
@@ -106,6 +289,39 @@ class PrecisionInvestigationContractTest(unittest.TestCase):
         self.assertNotIn('shard', workflow.lower())
         unix_runner = read('.github/workflows/run_unix_precision_tests.sh')
         self.assertIn('--environment-mode source-tree', unix_runner)
+
+    def test_unix_wrapper_creates_output_directory(self):
+        with unix_wrapper_case(0, 'missing') as case:
+            assert_exact_fake_argv(self, case)
+            self.assertEqual(case.result.returncode, 0, case.result.stderr)
+            self.assertEqual(case.sentinel.read_bytes(), b'fake evidence sentinel\n')
+            self.assertEqual(case.exit_path.read_bytes(), b'0\n')
+
+    def test_unix_wrapper_records_zero_and_nonzero_runner_exit(self):
+        for runner_exit, expected_bytes in ((0, b'0\n'), (23, b'23\n')):
+            with self.subTest(runner_exit=runner_exit):
+                with unix_wrapper_case(runner_exit, 'directory') as case:
+                    assert_exact_fake_argv(self, case)
+                    self.assertEqual(case.sentinel.read_bytes(), b'fake evidence sentinel\n')
+                    self.assertTrue(case.exit_path.is_file())
+                    self.assertEqual(case.exit_path.read_bytes(), expected_bytes)
+                    self.assertEqual(case.result.returncode, runner_exit)
+
+    def test_unix_wrapper_rejects_output_file_before_runner(self):
+        with unix_wrapper_case(0, 'file') as case:
+            self.assertNotEqual(case.result.returncode, 0)
+            self.assertEqual(case.calls, 0)
+            self.assertTrue(case.output.is_file())
+
+    def test_unix_wrapper_fails_closed_when_exit_path_is_directory(self):
+        with unix_wrapper_case(
+                0, 'directory', exit_path_directory=True
+        ) as case:
+            assert_exact_fake_argv(self, case)
+            self.assertEqual(case.sentinel.read_bytes(), b'fake evidence sentinel\n')
+            self.assertNotEqual(case.result.returncode, 0)
+            self.assertTrue(case.exit_path.is_dir())
+            self.assertFalse(case.exit_path.is_file())
 
     def test_windows_precision_reuses_formal_installed_wheel_path(self):
         runner = read('.github/workflows/run_windows_precision_tests.ps1')
