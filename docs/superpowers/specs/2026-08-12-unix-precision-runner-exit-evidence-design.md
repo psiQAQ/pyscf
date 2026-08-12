@@ -279,7 +279,13 @@ commit 合并进科学修复 commit；push 前不要求原生 Linux/macOS test e
 
 ### push 后 macOS wrapper witness
 
-普通 fast-forward push 新 head 后，先且只先派发一条 macOS wrapper witness：
+普通 fast-forward push 后立即从远端 readback 冻结一个 literal 40-hex
+`EvidenceHead`。从此不得为本轮 witness 或 Windows/Linux pair 重新读取、跟随或推进
+validation branch head；macOS witness latch/binding、Windows latch/binding、Linux
+latch/binding 和三个 frozen-validator report 的 `tested_sha` 必须分别精确等于该同一个
+`EvidenceHead`。远端分支随后移动不能改变本轮身份，只能使任何错误绑定 fail closed。
+
+冻结 `EvidenceHead` 后，先且只先派发一条 macOS wrapper witness：
 
 - nodeid：`pyscf/scf/test/test_addons.py::KnownValues::test_uhf_smearing`
 - repeats：`1`
@@ -290,7 +296,14 @@ commit 合并进科学修复 commit；push 前不要求原生 Linux/macOS test e
 - evidence mode：`source-tree`
 - expected native library count：`16`
 
-该 witness 必须通过独立 immutable latch/binding 绑定唯一 run ID，并严格验证
+该 witness 必须通过独立 immutable latch/binding 绑定唯一 run ID，并由一个只属于
+该 witness 的 heartbeat 管理。启动后必须冻结 heartbeat direct-child process 的 exact
+PID、process start UTC、executable 和完整 command identity；Goal 必须独立 readback 为
+exact `paused`。terminal 验收前必须证明该 direct child 已退出、PID 对应 process handle
+`HasExited=true` 且 exact PID 的 CIM row 已消失，并独立 readback Goal 为 exact
+`active`。该 heartbeat 不得接管 pair run，也不得与后续 pair heartbeat 重叠。
+
+随后严格验证
 attempt 1、`workflow_dispatch`、workflow/branch/head、唯一 `precision` job、唯一
 artifact、exact inputs、runtime LibXC、checkout/source-tree provenance、macOS
 `otool -L` linkage、16 项 native inventory，以及字节精确的
@@ -300,14 +313,16 @@ validator。
 
 macOS witness 只证明新 SHA 上真实 Unix wrapper 的成功路径、退出码持久化和
 source/native provenance 可归档；`repeats=1` 不是 UHF 科学稳定性结论，也不替代
-后续 Ubuntu 20-repeat evidence。只有该 witness strict `PASS` 后，才解锁下面的
-Windows+Ubuntu pair dispatch；witness failure 或 `INVALID` 必须保留证据并停止，
-不得提前派发 pair。
+后续 Ubuntu 20-repeat evidence。只有该 witness heartbeat 已完成上述 child-gone/Goal
+`active` 对账且 witness frozen-validator strict `PASS`、`tested_sha == EvidenceHead` 后，
+才解锁下面的 Windows+Ubuntu pair heartbeat 与 dispatch。witness failure 或 `INVALID`
+必须保留证据并停止，不得提前创建或启动 pair heartbeat，也不得提前派发 pair。
 
 ### 同一新 SHA 的正式复跑
 
-旧 archives 和 run metadata 保持 immutable。新 head 必须重新派发以下两个
-UHF singleton runs，二者 tested SHA 必须精确相同：
+旧 archives 和 run metadata 保持 immutable。已冻结的 `EvidenceHead` 必须重新派发
+以下两个 UHF singleton runs，二者 latch/binding head 与 frozen-validator
+`tested_sha` 必须精确等于该 literal `EvidenceHead`：
 
 - nodeid：`pyscf/scf/test/test_addons.py::KnownValues::test_uhf_smearing`
 - repeats：`20`
@@ -318,8 +333,10 @@ UHF singleton runs，二者 tested SHA 必须精确相同：
 - Linux：`ubuntu-latest`，artifact `precision-Linux-py3.12`，
   `source-tree`，expected native library count `16`
 
-两次 dispatch 使用各自 immutable latch/binding，并由同一个 heartbeat 同时管理两个
-精确 run IDs；不得同时启动第二个 poller。每个 run 仍需验证 attempt 1、
+两次 dispatch 使用各自 immutable latch/binding，并由一个新的 pair heartbeat 同时
+管理两个精确 run IDs；只有 macOS heartbeat 的 exact direct child 已证明退出且 Goal
+恢复 exact `active` 后才可启动该 pair heartbeat。两个 heartbeat 生命周期不得重叠，
+pair heartbeat 活动期间不得启动第二个 poller。每个 run 仍需验证 attempt 1、
 `workflow_dispatch`、workflow/branch/head、唯一 `precision` job、唯一 artifact、
 Python/profile/repeats/nodeid、runtime LibXC、records/logs/summary/environment/native
 linkage。Windows 必须重新得到 strict `PASS`，不能引用 run `31548379750` 替代；
@@ -327,8 +344,8 @@ Linux artifact 必须包含精确 `runner-exit-code.txt` 并得到 strict `PASS`
 run `31548408412` 的 20/20 advisory 重新解释为有效。
 
 只有两个新 artifact 都由冻结的 strict validator 报告 `valid=true`、`PASS`，且
-报告绑定同一新 SHA，Task 7 才可恢复 Step 3。Actions/job conclusion 或 20/20 summary
-单独都不满足该门禁。
+报告 `tested_sha` 均精确等于 frozen `EvidenceHead`，Task 7 才可恢复 Step 3。
+Actions/job conclusion 或 20/20 summary 单独都不满足该门禁。
 
 ## 回退与 no-replay 规则
 
@@ -341,8 +358,12 @@ run `31548408412` 的 20/20 advisory 重新解释为有效。
 - 新 dispatch 已被 latch 记录但当前 shell 中断时，只按同一 latch、binding 和
   exact run ID 恢复；不得重放 `gh workflow run`。artifact latency 只重查同一 run，
   不触发新 run。
-- macOS witness 已 dispatch 后只恢复其 exact run ID；不得为了等待或 artifact
-  latency 重放 witness。witness strict `PASS` 前不得创建 Windows/Linux pair latch。
+- macOS witness 已 dispatch 后只恢复其 exact run ID 和 exact heartbeat direct-child
+  identity；不得为了等待或 artifact latency 重放 witness。其 child-gone/Goal `active`
+  对账及 strict `PASS` 前不得创建 Windows/Linux pair latch 或 pair heartbeat。
+- `EvidenceHead` 冻结后不得因 branch head 移动而重新绑定本轮任何 latch、binding、
+  heartbeat 或 validator report；需要不同 head 时进入新的 state namespace 和新一轮
+  immutable dispatch identity。
 - 任一新 run 失败或 INVALID 时，保留第一份有效失败证据，停止 Step 3；修复后
   使用另一个新 SHA 和新的 immutable dispatch identity，不覆盖本轮 archive。
 
@@ -396,13 +417,20 @@ runner 的原始退出状态。该方案会错误地使现有 Linux artifact 看
 6. implementation commit 在 `2eb90e3f99219e28390570d13bd906cfe6e17012`
    之上完成 Windows/MSYS 门禁和独立 review，再以普通 fast-forward push 形成新
    validation head；
-7. push 后 macOS singleton/1/Python 3.12/4/4 witness 先通过冻结 validator：artifact
+7. push 后从 remote readback 冻结 literal `EvidenceHead`；macOS、Windows、Linux 的
+   latch/binding head 和三个 validator `tested_sha` 全部精确等于该值，且本轮后续不
+   重新读取或跟随 branch head；
+8. macOS singleton/1/Python 3.12/4/4 witness 先通过冻结 validator：artifact
    含 exact `runner-exit-code.txt == b'0\n'`、source-tree/native-16/provenance，且该
    witness 只作为 wrapper transport 证据，不表述为科学稳定性结论；
-8. macOS witness strict `PASS` 后，新 Windows 与 Ubuntu runs 才使用同一新 SHA、
-   singleton/20/Python 3.12/4/4 由唯一 heartbeat 管理；
-9. Windows installed-wheel/native-26 与 Linux source-tree/native-16 artifact 均
+9. macOS witness 由独立唯一 heartbeat 管理，冻结 exact direct-child PID/start
+   UTC/executable/command identity；Goal 从 exact `paused` 到 terminal child-gone/CIM
+   gone 后 exact `active`。该 heartbeat 退出且 witness strict `PASS` 后才启动不重叠的
+   pair heartbeat；
+10. 新 Windows 与 Ubuntu runs 使用同一 `EvidenceHead`、singleton/20/Python
+   3.12/4/4，由唯一 pair heartbeat 管理；
+11. Windows installed-wheel/native-26 与 Linux source-tree/native-16 artifact 均
    通过冻结 strict validator，报告 `valid=true`、`PASS`；
-10. 旧 archives 未改变、无 dispatch replay、无第二 poller、无提前更新 #3312；
-11. macOS witness 与 Windows/Linux 两个新 PASS 全部满足之前，Task 7 Step 3 始终
+12. 旧 archives 未改变、无 dispatch replay、无并发或第二 poller、无提前更新 #3312；
+13. macOS witness 与 Windows/Linux 两个新 PASS 全部满足之前，Task 7 Step 3 始终
     保持暂停。
