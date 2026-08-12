@@ -279,11 +279,17 @@ commit 合并进科学修复 commit；push 前不要求原生 Linux/macOS test e
 
 ### push 后 macOS wrapper witness
 
-普通 fast-forward push 后立即从远端 readback 冻结一个 literal 40-hex
-`EvidenceHead`。从此不得为本轮 witness 或 Windows/Linux pair 重新读取、跟随或推进
-validation branch head；macOS witness latch/binding、Windows latch/binding、Linux
+push 前必须把已经完成全部 Windows/MSYS 门禁且获得独立 review `APPROVED` 的 exact
+40-hex evidence commit 冻结为 `ExpectedEvidenceHead`。普通 fast-forward push 只能推送
+该 exact commit；push 后 remote readback 必须精确等于 `ExpectedEvidenceHead`，否则
+fail closed、不得 dispatch。只有相等时，才把同一个 literal 赋为 `EvidenceHead`。
+
+从此不得为本轮 witness 或 Windows/Linux pair 跟随、重算或推进 validation branch
+head；macOS witness latch/binding、Windows latch/binding、Linux
 latch/binding 和三个 frozen-validator report 的 `tested_sha` 必须分别精确等于该同一个
 `EvidenceHead`。远端分支随后移动不能改变本轮身份，只能使任何错误绑定 fail closed。
+在 macOS、Windows、Linux 每次 dispatch 前，仍必须单独读取 remote branch 并仅验证
+它精确等于 frozen `EvidenceHead`；该 equality check 不得给 `EvidenceHead` 重新赋值。
 
 冻结 `EvidenceHead` 后，先且只先派发一条 macOS wrapper witness：
 
@@ -364,6 +370,8 @@ Actions/job conclusion 或 20/20 summary 单独都不满足该门禁。
 - `EvidenceHead` 冻结后不得因 branch head 移动而重新绑定本轮任何 latch、binding、
   heartbeat 或 validator report；需要不同 head 时进入新的 state namespace 和新一轮
   immutable dispatch identity。
+- 任一 dispatch 后发现 run head 不等于 frozen `EvidenceHead` 时，保留该失败身份并
+  `STOP`；不得重放 dispatch、改绑另一个 run 或从当前 remote head 导出替代值。
 - 任一新 run 失败或 INVALID 时，保留第一份有效失败证据，停止 Step 3；修复后
   使用另一个新 SHA 和新的 immutable dispatch identity，不覆盖本轮 archive。
 
@@ -417,20 +425,23 @@ runner 的原始退出状态。该方案会错误地使现有 Linux artifact 看
 6. implementation commit 在 `2eb90e3f99219e28390570d13bd906cfe6e17012`
    之上完成 Windows/MSYS 门禁和独立 review，再以普通 fast-forward push 形成新
    validation head；
-7. push 后从 remote readback 冻结 literal `EvidenceHead`；macOS、Windows、Linux 的
-   latch/binding head 和三个 validator `tested_sha` 全部精确等于该值，且本轮后续不
-   重新读取或跟随 branch head；
-8. macOS singleton/1/Python 3.12/4/4 witness 先通过冻结 validator：artifact
+7. push 前把已通过完整门禁和独立 review 的 exact commit 冻结为
+   `ExpectedEvidenceHead`；普通 FF push 的 remote readback 必须精确等于它，才建立同值
+   literal `EvidenceHead`，否则 fail closed 且不 dispatch；
+8. macOS、Windows、Linux 每次 dispatch 前都单独核 remote branch 精确等于 frozen
+   `EvidenceHead`，但不得据此重算或重绑；三个 latch/binding head 和 validator
+   `tested_sha` 全部精确等于该值，run head mismatch 只保留失败并停止、不 replay；
+9. macOS singleton/1/Python 3.12/4/4 witness 先通过冻结 validator：artifact
    含 exact `runner-exit-code.txt == b'0\n'`、source-tree/native-16/provenance，且该
    witness 只作为 wrapper transport 证据，不表述为科学稳定性结论；
-9. macOS witness 由独立唯一 heartbeat 管理，冻结 exact direct-child PID/start
+10. macOS witness 由独立唯一 heartbeat 管理，冻结 exact direct-child PID/start
    UTC/executable/command identity；Goal 从 exact `paused` 到 terminal child-gone/CIM
    gone 后 exact `active`。该 heartbeat 退出且 witness strict `PASS` 后才启动不重叠的
    pair heartbeat；
-10. 新 Windows 与 Ubuntu runs 使用同一 `EvidenceHead`、singleton/20/Python
+11. 新 Windows 与 Ubuntu runs 使用同一 `EvidenceHead`、singleton/20/Python
    3.12/4/4，由唯一 pair heartbeat 管理；
-11. Windows installed-wheel/native-26 与 Linux source-tree/native-16 artifact 均
+12. Windows installed-wheel/native-26 与 Linux source-tree/native-16 artifact 均
    通过冻结 strict validator，报告 `valid=true`、`PASS`；
-12. 旧 archives 未改变、无 dispatch replay、无并发或第二 poller、无提前更新 #3312；
-13. macOS witness 与 Windows/Linux 两个新 PASS 全部满足之前，Task 7 Step 3 始终
+13. 旧 archives 未改变、无 dispatch replay、无并发或第二 poller、无提前更新 #3312；
+14. macOS witness 与 Windows/Linux 两个新 PASS 全部满足之前，Task 7 Step 3 始终
     保持暂停。
