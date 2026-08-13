@@ -1,0 +1,1 @@
+pyscf/dft/test/test_gks.py::KnownValues::test_collinear_gks_lda
