@@ -1,0 +1,2 @@
+pyscf/cc/test/test_eom_gccsd.py::KnownValues::test_ipccsd
+pyscf/cc/test/test_eom_gccsd.py::KnownValues::test_eaccsd
