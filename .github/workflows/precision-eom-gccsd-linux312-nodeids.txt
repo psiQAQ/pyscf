@@ -1,2 +1,4 @@
 pyscf/cc/test/test_eom_gccsd.py::KnownValues::test_ipccsd
 pyscf/cc/test/test_eom_gccsd.py::KnownValues::test_eaccsd
+pyscf/cc/test/test_eom_gccsd.py::KnownValues::test_ipccsd_star_degenerate_left_gauge
+pyscf/cc/test/test_eom_gccsd.py::KnownValues::test_eaccsd_star_degenerate_left_gauge
