@@ -67,6 +67,27 @@ def tearDownModule():
 # 4 states, in order: 1^A1, 3^B2, 1^B2, 3^A1
 # 3 distinct ways of using state_average_mix to specify these states
 class KnownValues(unittest.TestCase):
+    def test_nosymm_sa4_newton_convflag(self):
+        # Diagnostic variant: same settings as test_nosymm_sa4_newton plus a
+        # converged-flag probe, to distinguish "legitimately converged within
+        # the default tolerance but outside the assertion" from "unconverged".
+        mc = mcscf.CASSCF (m, 4, 4).state_average_([0.25,]*4).newton ()
+        mo = mc.sort_mo([4,5,6,10], base=1)
+        mc.kernel(mo)
+        self.assertTrue(mc.converged)
+        self.assertAlmostEqual (mc.e_tot, mc_ref.e_tot, 8)
+
+    def test_nosymm_sa4_newton_tol8(self):
+        # Diagnostic variant: tightened conv_tol; checks whether the tighter
+        # gradient threshold compresses the converged-energy scatter inside
+        # the eight-place assertion.
+        mc = mcscf.CASSCF (m, 4, 4).state_average_([0.25,]*4).newton ()
+        mc.conv_tol = 1e-8
+        mo = mc.sort_mo([4,5,6,10], base=1)
+        mc.kernel(mo)
+        self.assertTrue(mc.converged)
+        self.assertAlmostEqual (mc.e_tot, mc_ref.e_tot, 8)
+
     def test_nosymm_sa4_newton (self):
         mc = mcscf.CASSCF (m, 4, 4).state_average_([0.25,]*4).newton ()
         mo = mc.sort_mo([4,5,6,10], base=1)
