@@ -1,0 +1,1 @@
+pyscf/sgx/test/test_dm_screening.py::KnownValues::test_uhf_dm_screening
