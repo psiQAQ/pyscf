@@ -1,2 +1,1 @@
 pyscf/cc/test/test_rccsd.py::KnownValues::test_update_amps
-pyscf/x2c/test/test_x2c.py::KnownValues::test_lindep_xbasis
