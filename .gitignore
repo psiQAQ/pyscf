@@ -89,3 +89,8 @@ tmp/
 # mypy
 .mypy_cache/
 
+# Local agent knowledge and linked worktrees
+/AGENTS.md
+/.agents/
+/.worktrees/
+
