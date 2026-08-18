@@ -1,2 +1,1 @@
 pyscf/mcscf/test/test_h2o.py::KnownValues::test_nosymm_sa4_newton
-pyscf/soscf/test/test_newton_ah.py::KnownValuesCIAH::test_davidson_cc_tiny_initial_guess
