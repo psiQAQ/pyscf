@@ -96,6 +96,29 @@ class KnownValues(unittest.TestCase):
         energy2 = mf.kernel()
         self.assertAlmostEqual(energy, energy2, 9)
 
+    def test_check_extra_convergence(self):
+        mol = gto.M(atom='He', basis='sto-3g', verbose=0)
+        mf = sgx.sgx_fit(scf.RHF(mol))
+        base_envs = {
+            'e_tot': 0.0,
+            'last_hf_e': 0.0,
+            'conv_tol': 1e-11,
+            'norm_gorb': 0.0,
+            'conv_tol_grad': 3e-6,
+        }
+        cases = (
+            ('both pass', 0.5e-11, 0.5e-6, True),
+            ('energy only', 0.5e-11, 4e-6, False),
+            ('gradient only', 2.6267343855579384e-10,
+             4.0347904631078535e-9, False),
+            ('neither', 2e-11, 4e-6, False),
+        )
+        for name, delta_e, norm_gorb, expected in cases:
+            with self.subTest(name):
+                envs = dict(base_envs, e_tot=delta_e, norm_gorb=norm_gorb)
+                self.assertEqual(mf.check_extra_convergence(envs), expected)
+
+
 if __name__ == "__main__":
     print("Full Tests for SGX")
     unittest.main()

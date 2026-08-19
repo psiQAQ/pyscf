@@ -229,6 +229,20 @@ class _SGXHF:
                 if haslock is None:
                     self._ctx_lock = None
 
+    def check_extra_convergence(self, envs):
+        '''Convergence check of the extra (conv_check) cycle.
+
+        SGX finite-difference gradients need the displaced-geometry SCF
+        solutions to stay on the same physical branch; accepting an
+        extra-cycle state on the relaxed OR criteria can hand out an
+        energy-drifted state that the small displacement then amplifies.
+        Require energy and orbital-gradient stability together.
+        '''
+        energy_converged = (
+            abs(envs['e_tot'] - envs['last_hf_e']) < envs['conv_tol'])
+        gradient_converged = envs['norm_gorb'] < envs['conv_tol_grad']
+        return energy_converged and gradient_converged
+
     def post_kernel(self, envs):
         self._in_scf = False
 
