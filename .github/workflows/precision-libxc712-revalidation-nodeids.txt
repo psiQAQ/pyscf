@@ -1,0 +1,3 @@
+pyscf/pbc/tdscf/test/test_rks.py::Diamond::test_hse06_tda
+pyscf/sgx/grad/test/test_rks.py::KnownValues::test_finite_diff_grad
+pyscf/pbc/tdscf/test/test_uks.py::DiamondM06::test_hse03_tda

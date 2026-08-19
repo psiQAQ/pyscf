@@ -1,0 +1,147 @@
+name: Precision investigation
+
+on:
+  workflow_dispatch:
+    inputs:
+      nodeids_file:
+        description: Exact pytest nodeids, one per line, committed on the investigation branch
+        required: true
+        default: .github/workflows/precision-selected-nodeids.txt
+        type: string
+      repeats:
+        description: Planned attempts per nodeid
+        required: true
+        default: "20"
+        type: string
+      platform:
+        description: Runner platform
+        required: true
+        default: windows-latest
+        type: choice
+        options:
+          - windows-latest
+          - ubuntu-latest
+          - macos-latest
+      python_version:
+        description: Python version
+        required: true
+        default: "3.13"
+        type: choice
+        options:
+          - "3.8"
+          - "3.12"
+          - "3.13"
+      profile:
+        description: OMP threads / BLAS threads
+        required: true
+        default: 1/1
+        type: choice
+        options:
+          - 1/1
+          - 4/1
+          - 1/4
+          - 4/4
+
+permissions:
+  contents: read
+
+concurrency:
+  group: precision-${{ github.ref }}-${{ inputs.platform }}-${{ inputs.python_version }}-${{ inputs.profile }}
+  cancel-in-progress: false
+
+jobs:
+  precision:
+    runs-on: ${{ inputs.platform }}
+    timeout-minutes: 360
+    env:
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+      PRECISION_NODEIDS_FILE: ${{ inputs.nodeids_file }}
+      PRECISION_REPEATS: ${{ inputs.repeats }}
+      PRECISION_PROFILE: ${{ inputs.profile }}
+      PRECISION_TESTED_SHA: ${{ github.sha }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python ${{ inputs.python_version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python_version }}
+
+      - name: Validate precision selection
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path tmp/precision-results -Force | Out-Null
+          python .github/workflows/run_precision_tests.py `
+            --nodeids-file $env:PRECISION_NODEIDS_FILE `
+            --repeats $env:PRECISION_REPEATS `
+            --profile $env:PRECISION_PROFILE `
+            --tested-sha $env:PRECISION_TESTED_SHA `
+            --validate-only 2>&1 | Tee-Object tmp/precision-results/input-validation.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Install and build on Unix
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            ci_os=linux
+          else
+            ci_os=macos
+          fi
+          ".github/workflows/ci_${ci_os}/deps_apt.sh"
+          ".github/workflows/ci_${ci_os}/python_deps.sh"
+          ".github/workflows/ci_${ci_os}/build_pyscf.sh"
+
+      - name: Run source-tree precision tests on Unix
+        if: runner.os != 'Windows'
+        shell: bash
+        run: >-
+          bash .github/workflows/run_unix_precision_tests.sh
+          "$PRECISION_NODEIDS_FILE"
+          "$PRECISION_REPEATS"
+          "$PRECISION_PROFILE"
+          tmp/precision-results
+
+      - name: Set up MSYS2 UCRT64
+        if: runner.os == 'Windows'
+        id: msys2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-openblas
+
+      - name: Install Windows build dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: python -m pip install build wheel setuptools "cmake<4" ninja
+
+      - name: Run installed-wheel precision tests on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: >-
+          ./.github/workflows/run_windows_precision_tests.ps1
+          -NodeIdsFile $env:PRECISION_NODEIDS_FILE
+          -Repeats $env:PRECISION_REPEATS
+          -Profile $env:PRECISION_PROFILE
+          -RuntimeDllDir "${{ steps.msys2.outputs.msys2-location }}\ucrt64\bin"
+
+      - name: Publish precision summary
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path tmp/precision-results/summary.md) {
+            Get-Content tmp/precision-results/summary.md | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+
+      - name: Upload precision evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: precision-${{ runner.os }}-py${{ inputs.python_version }}
+          path: tmp/precision-results/**
+          if-no-files-found: warn
+          include-hidden-files: true
