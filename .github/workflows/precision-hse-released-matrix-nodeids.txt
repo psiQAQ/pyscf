@@ -1,0 +1,2 @@
+pyscf/pbc/tdscf/test/test_rks.py::Diamond::test_hse06_tda
+pyscf/pbc/tdscf/test/test_uks.py::DiamondM06::test_hse03_tda

@@ -1,0 +1,2 @@
+pyscf/x2c/test/test_x2c.py::KnownValues::test_lindep_xbasis
+pyscf/x2c/test/test_x2c.py::KnownValues::test_x2c1e_hcore_lindep_fallback
