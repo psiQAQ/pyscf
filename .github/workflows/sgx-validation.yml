@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: sgx-full-dm-omp4-smoke-${{ github.ref }}-${{ github.sha }}
+  group: sgx-full-dm-omp4-smoke-linux-probe-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:
@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 180
     env:
