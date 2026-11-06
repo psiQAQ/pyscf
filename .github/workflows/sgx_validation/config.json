@@ -1,8 +1,13 @@
 {
   "science_sha": "aa38bebb701e9785d9cd1a3cd452bfc8bfb3e9d0",
   "topic": "full-dm",
-  "stage": "smoke-linux-probe",
-  "windows_attempts": 2,
-  "linux_attempts": 2,
-  "suites": ["lifecycle", "rks", "uks", "sgx"]
+  "stage": "formal",
+  "windows_attempts": 200,
+  "linux_attempts": 20,
+  "suites": [
+    "lifecycle",
+    "rks",
+    "uks",
+    "sgx"
+  ]
 }
