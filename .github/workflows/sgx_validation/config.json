@@ -1,0 +1,14 @@
+{
+  "science_sha": "0cf34ef71fe2ad9fb98a233398ccc129d0f59f6f",
+  "topic": "combined",
+  "stage": "formal",
+  "windows_attempts": 20,
+  "linux_attempts": 5,
+  "suites": [
+    "lifecycle",
+    "forwarding",
+    "rks",
+    "uks",
+    "sgx"
+  ]
+}
