@@ -1,0 +1,112 @@
+name: UCISD H4 investigation
+
+on:
+  push:
+    branches: [codex/investigate/ucisd-h4-20261107]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ucisd-h4-${{ github.sha }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows-baseline:
+    runs-on: windows-2025
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      OMP_NUM_THREADS: '1'
+      OPENBLAS_NUM_THREADS: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13.17'
+      - name: Isolate task temporary directories
+        run: |
+          $scratch = Join-Path $env:RUNNER_TEMP 'ucisd-h4-${{ github.sha }}-windows'
+          New-Item -ItemType Directory -Path $scratch | Out-Null
+          foreach ($name in @('RUNNER_TEMP', 'TMP', 'TEMP', 'PYSCF_TMPDIR', 'PIP_CACHE_DIR')) {
+            "$name=$scratch" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          }
+      - uses: msys2/setup-msys2@v2
+        id: msys2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-openblas
+      - name: Install existing build dependencies
+        run: python -B -m pip install build wheel setuptools 'cmake<4' ninja
+      - name: Build baseline wheel
+        run: >-
+          ./.github/workflows/ci_windows/build_wheel.ps1
+          -RuntimeDllDir '${{ steps.msys2.outputs.msys2-location }}\ucrt64\bin'
+          -ReportDirectory tmp/ucisd-h4
+      - name: Installed-wheel original tests and observed full CI
+        run: python -B .github/workflows/ucisd_h4/installed.py --full
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ucisd-h4-${{ github.sha }}-windows-py31317-2w
+          if-no-files-found: error
+          include-hidden-files: true
+          path: tmp/ucisd-h4/**
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ucisd-h4-${{ github.sha }}-windows-wheel
+          if-no-files-found: warn
+          path: dist/*.whl
+
+  linux-control:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      OMP_NUM_THREADS: '1'
+      OPENBLAS_NUM_THREADS: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+      CMAKE_BUILD_PARALLEL_LEVEL: '4'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13.17'
+      - name: Isolate task temporary directories
+        run: |
+          scratch="$RUNNER_TEMP/ucisd-h4-${{ github.sha }}-linux"
+          mkdir -p "$scratch"
+          for name in RUNNER_TEMP TMP TEMP TMPDIR PYSCF_TMPDIR PIP_CACHE_DIR; do
+            printf '%s=%s\n' "$name" "$scratch" >> "$GITHUB_ENV"
+          done
+      - name: Install existing build dependencies
+        run: |
+          ./.github/workflows/ci_linux/deps_apt.sh
+          python -B -m pip install build wheel setuptools 'cmake<4' ninja
+      - name: Build baseline wheel
+        run: |
+          mkdir -p tmp/ucisd-h4
+          python -B -m build --wheel --no-isolation 2>&1 | tee tmp/ucisd-h4/build.log
+      - name: Installed-wheel CISD control
+        run: python -B .github/workflows/ucisd_h4/installed.py
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ucisd-h4-${{ github.sha }}-linux-py31317-2w
+          if-no-files-found: error
+          include-hidden-files: true
+          path: tmp/ucisd-h4/**
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ucisd-h4-${{ github.sha }}-linux-wheel
+          if-no-files-found: warn
+          path: dist/*.whl
