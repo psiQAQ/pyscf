@@ -14,13 +14,18 @@ def pytest_runtest_makereport(item, call):
     from pathlib import Path
     import sys
 
-    import psutil
     import pyscf
     from pyscf import lib
 
-    libraries = sorted({m.path for m in psutil.Process().memory_maps()
-                        if m.path.lower().endswith(('.dll', '.pyd', '.so'))
-                        or '.so.' in m.path})
+    if sys.platform == 'win32':
+        import psutil
+        paths = [m.path for m in psutil.Process().memory_maps()]
+    else:
+        paths = [fields[5] for line in Path('/proc/self/maps').read_text().splitlines()
+                 if len(fields := line.split(maxsplit=5)) == 6]
+    libraries = sorted({path for path in paths
+                        if path.lower().endswith(('.dll', '.pyd', '.so'))
+                        or '.so.' in path})
     blas = []
     for path in libraries:
         if 'openblas' not in path.lower():
