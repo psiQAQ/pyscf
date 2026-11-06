@@ -113,6 +113,8 @@ def run_one(args):
               'thread_environment': {key: os.environ.get(key) for key in
                   ['OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS',
                    'BLIS_NUM_THREADS', 'VECLIB_MAXIMUM_THREADS', 'NUMEXPR_NUM_THREADS']},
+              'temporary_environment': {key: os.environ.get(key) for key in
+                  ['RUNNER_TEMP', 'TMP', 'TEMP', 'PYSCF_TMPDIR']},
               'native_library_adapter': str(args.native_lib) if args.native_lib else None,
               'numerical_wrappers': False, 'gradient_cases': [], 'test_sources': []}
     paths = {
@@ -124,6 +126,7 @@ def run_one(args):
     }[args.suite]
     suite = unittest.TestSuite()
     observed_codes = set()
+    expected_gradient_cases = []
     for i, path in enumerate(paths):
         test_path = args.test_root / path
         report['test_sources'].append({'path': path, 'sha256': digest(test_path)})
@@ -134,6 +137,10 @@ def run_one(args):
         if args.suite in ['rks', 'uks']:
             suite.addTest(module.KnownValues('test_finite_diff_grad_high_cost'))
             observed_codes.add(module.KnownValues._check_finite_diff_grad.__code__)
+            expected_gradient_cases = [
+                (xc, settings, precision)
+                for settings, precision in zip(module.ALL_SETTINGS, module.ALL_PRECISIONS)
+                for xc in ['PBE0', 'HSE06', 'WB97X']]
         elif args.suite == 'sgx':
             names = [name for name in unittest.defaultTestLoader.getTestCaseNames(module.KnownValues)
                      if not name.endswith('_high_cost')]
@@ -172,7 +179,8 @@ def run_one(args):
     executed = result.testsRun == expected_count and not result.skipped
     if observed_codes:
         cases = report['gradient_cases']
-        executed = executed and len(cases) == 9 and [r['xc'] for r in cases] == ['PBE0', 'HSE06', 'WB97X'] * 3
+        observed = [(r['xc'], r['settings'], r['decimals']) for r in cases]
+        executed = executed and len(cases) == 9 and observed == expected_gradient_cases
         executed = executed and all('error' in row for row in cases)
     report['result'] = 'Passed' if result.wasSuccessful() and executed else 'Failed'
     write_json(args.output / 'result.json', report)
