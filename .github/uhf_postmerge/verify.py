@@ -75,6 +75,10 @@ def bundle(args):
 def install(args):
     root = args.root.resolve()
     manifest = json.loads((root / 'bundle/manifest.json').read_text())
+    manifest['build_tool_sha'] = manifest['tool_sha']
+    manifest['tool_sha'] = git(Path(__file__).resolve().parents[2], 'rev-parse', 'HEAD')
+    manifest['runtime_tool_files'] = {
+        p.name: sha256(p) for p in Path(__file__).parent.glob('*.py')}
     wheel = root / 'bundle' / manifest['wheel']
     assert sha256(wheel) == manifest['wheel_sha256']
     venv = root / 'venv'

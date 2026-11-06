@@ -3,7 +3,7 @@ name: UHF postmerge 20261107
 on:
   push:
     branches: [codex/verify/uhf-postmerge-20261107]
-    paths: [.github/uhf_postmerge/**, .github/workflows/uhf-postmerge-20261107.yml]
+    paths: [.github/uhf_postmerge/start-full-run.txt]
   workflow_dispatch:
 
 permissions:
@@ -166,6 +166,15 @@ jobs:
         shell: pwsh
         run: |
           python .github/uhf_postmerge/verify.py install --root $env:UHF_ROOT 2>&1 | Tee-Object "$env:UHF_ROOT/evidence/install.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Install existing Linux native dependencies on the fresh runner
+        if: runner.os == 'Linux'
+        shell: bash
+        run: bash .github/workflows/ci_linux/deps_apt.sh
+      - name: Full-node preflight on each fresh formal runner
+        shell: pwsh
+        run: |
+          python .github/uhf_postmerge/verify.py sweep --root $env:UHF_ROOT --label runner-preflight --repeats 1 --stop-on-failure
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Fresh-process formal sweep
         shell: pwsh

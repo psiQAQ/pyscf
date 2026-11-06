@@ -12,6 +12,16 @@ outside the checkout, and stages only the original test files. The baseline
 Windows build script is reused unchanged. The old precision wrapper is not used:
 the current Windows verifier does not accept its `Precision*` parameters.
 
+The full workflow is explicitly triggered by creating or updating
+`start-full-run.txt` in this directory. The separate Linux resume workflow
+reuses the wheel from run 42281471449, installs the existing native Linux
+dependencies on each fresh runner, and gates each 100-attempt shard with a
+full-node preflight. The first formal Linux run omitted those native packages:
+all attempts stopped at import with missing `libblas.so.3`, before pytest ran.
+Those failures remain preserved; Windows's independent evidence is retained.
+The runtime manifest records both the wheel builder's tool SHA and the current
+verification tool SHA when an existing wheel is reused.
+
 Both platform preflights must pass the entire explicit node
 `pyscf/scf/test/test_addons.py::KnownValues::test_uhf_smearing` (both Fe2 stages),
 with one collected/executed/passed test, no skip/deselection, two SCF stage

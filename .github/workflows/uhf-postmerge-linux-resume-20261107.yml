@@ -1,0 +1,78 @@
+name: UHF postmerge Linux resume 20261107
+
+on:
+  push:
+    branches: [codex/verify/uhf-postmerge-20261107]
+    paths: [.github/workflows/uhf-postmerge-linux-resume-20261107.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: uhf-postmerge-linux-resume-20261107-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  formal:
+    if: github.repository == 'psiQAQ/pyscf' && github.ref == 'refs/heads/codex/verify/uhf-postmerge-20261107'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Isolate task directories
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / ('uhf-' + os.environ['GITHUB_RUN_ID'] + '-linux312-${{ matrix.shard }}')
+          scratch = root / 'scratch'
+          scratch.mkdir(parents=True, exist_ok=False)
+          (root / 'evidence').mkdir()
+          with open(os.environ['GITHUB_ENV'], 'a') as f:
+              for key, value in {'UHF_ROOT': root, 'RUNNER_TEMP': scratch, 'TMP': scratch, 'TEMP': scratch, 'TMPDIR': scratch, 'PYSCF_TMPDIR': scratch, 'PIP_CACHE_DIR': root / 'pip-cache'}.items():
+                  f.write(f'{key}={value}\n')
+      - name: Install existing Linux native dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash .github/workflows/ci_linux/deps_apt.sh 2>&1 | tee "$UHF_ROOT/evidence/native-dependencies.log"
+          dpkg-query -W libblas3 libblas-dev liblapack3 liblapack-dev libgomp1 > "$UHF_ROOT/evidence/native-package-versions.txt"
+      - name: Download the already validated baseline wheel
+        uses: actions/download-artifact@v7
+        with:
+          name: uhf-bundle-linux312-98508952b6b7ce9a94ffb484514188176f59848e
+          path: ${{ env.UHF_ROOT }}/bundle
+          run-id: '42281471449'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install the same wheel and pinned Python dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python .github/uhf_postmerge/verify.py install --root "$UHF_ROOT" 2>&1 | tee "$UHF_ROOT/evidence/install.log"
+      - name: Full-node preflight on this fresh runner
+        shell: bash
+        run: python .github/uhf_postmerge/verify.py sweep --root "$UHF_ROOT" --label runner-preflight --repeats 1 --stop-on-failure
+      - name: 100 fresh-process attempts on the unchanged source
+        shell: bash
+        run: python .github/uhf_postmerge/verify.py sweep --root "$UHF_ROOT" --label formal --repeats 100
+      - name: Retain every attempt and any failure
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: uhf-formal-linux312-${{ matrix.shard }}-${{ github.sha }}
+          path: ${{ env.UHF_ROOT }}/evidence/**
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 90
