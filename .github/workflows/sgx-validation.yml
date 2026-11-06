@@ -30,8 +30,13 @@ jobs:
       BLIS_NUM_THREADS: '1'
       VECLIB_MAXIMUM_THREADS: '1'
       PYTHONDONTWRITEBYTECODE: '1'
-      SGX_RUN_ROOT: ${{ runner.temp }}/sgx-${{ github.sha }}-${{ matrix.os }}
     steps:
+      - name: Set task directory on the runner
+        shell: pwsh
+        run: |
+          $sgxRunRoot = Join-Path $env:RUNNER_TEMP "sgx-$env:GITHUB_SHA-$env:RUNNER_OS"
+          "SGX_RUN_ROOT=$sgxRunRoot" >> $env:GITHUB_ENV
+
       - uses: actions/checkout@v7
         with:
           path: validation
@@ -86,6 +91,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          $env:RUNNER_TEMP = Join-Path $env:SGX_RUN_ROOT 'scratch'
           try {
             ./candidate/.github/workflows/ci_windows/build_wheel.ps1 -RuntimeDllDir "${{ steps.msys2.outputs.msys2-location }}\ucrt64\bin"
           } finally {
@@ -99,6 +105,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export RUNNER_TEMP="$SGX_RUN_ROOT/scratch"
           bash candidate/.github/workflows/ci_linux/deps_apt.sh
           dpkg-query -W gcc g++ gfortran libblas-dev liblapack-dev cmake > "$SGX_RUN_ROOT/evidence/system-packages.txt"
           python -m pip install numpy scipy h5py setuptools wheel 'cmake<4'
