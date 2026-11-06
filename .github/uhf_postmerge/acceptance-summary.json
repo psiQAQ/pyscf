@@ -1,0 +1,1680 @@
+{
+  "status": "Passed",
+  "created_utc": "2026-11-06T20:20:46.457277+00:00",
+  "assembler_sha256": "0cbe6a8bce3ba8168dda02fd3fc488f2c22a975ad39ff5f13388d156832a6eb9",
+  "audit_script_sha256": "252d1fe9665b1c73c6144875ccabdf53ff13fb9689861666e24402fd31a4f4d2",
+  "source_sha": "ab749b4fd00f95a08ad00997356c9f6f77fc8674",
+  "final_pr_head": "e7d2001bc49df99b65cd182fc3cb70ea9948724b",
+  "merge_sha": "fd6b6898a3d06fa0628f9d8544476a856dc711a8",
+  "formal_passed": {
+    "windows313": 200,
+    "linux312": 1000
+  },
+  "unique_formal_samples": 1200,
+  "runs": [
+    {
+      "run_id": 42281471449,
+      "url": "https://github.com/psiQAQ/pyscf/actions/runs/42281471449",
+      "workflow_conclusion": "failure",
+      "runtime_tool_sha": "98508952b6b7ce9a94ffb484514188176f59848e",
+      "platform": "windows313",
+      "formal_passed": 200,
+      "audit": "acceptance-windows.json",
+      "audit_sha256": "73ffae7cd63c161c7067158288e9152faef0a65dea91171f10aa634b49786add",
+      "archives": [
+        {
+          "name": "uhf-formal-linux312-2-98508952b6b7ce9a94ffb484514188176f59848e",
+          "id": 13537110492,
+          "sha256": "sha256:3e52cb9cf0fdf46f3f222c43815e0c9c177d6ab2f232f24bb0732816863aaf4e"
+        },
+        {
+          "name": "uhf-formal-windows313-1-98508952b6b7ce9a94ffb484514188176f59848e",
+          "id": 13536927109,
+          "sha256": "sha256:a5daecec9be753ba3b5a0135e2a186037706d033a0d052c3ce4ac67956d230c2"
+        },
+        {
+          "name": "uhf-bundle-linux312-98508952b6b7ce9a94ffb484514188176f59848e",
+          "id": 13536890217,
+          "sha256": "sha256:20ec90e1d6380d1a479c368e8ca6d1fbbe4ea449d22ff2e197ef064650374ab4"
+        },
+        {
+          "name": "uhf-preflight-windows313-98508952b6b7ce9a94ffb484514188176f59848e",
+          "id": 13536871349,
+          "sha256": "sha256:ebc2907af8094e8b7207aad59032fd3d6bccc5b9f0bfbed493b1f2ac0e749365"
+        },
+        {
+          "name": "uhf-formal-linux312-7-98508952b6b7ce9a94ffb484514188176f59848e",
+          "id": 13536751787,
+          "sha256": "sha256:7cc17f0580913279248ff8ba338e95cb1d18f0da963a837739628a2a8da6c894"
+        },
+        {
+          "name": "uhf-formal-linux312-4-98508952b6b7ce9a94ffb484514188176f59848e",
+          "id": 13536696728,
+          "sha256": "sha256:f33147c0df30ba021af23521b8507c5c4ef317884a36c360c2c955e8b7057fca"
+        },
+        {
+          "name": "uhf-formal-linux312-1-98508952b6b7ce9a94ffb484514188176f59848e",
+          "id": 13536611765,
+          "sha256": "sha256:ba0b164247e0f648a6a1ad781b34edf2d6b188ee6024750a100ff05ff1f596a0"
+        },
+        {
+          "name": "uhf-formal-linux312-5-98508952b6b7ce9a94ffb484514188176f59848e",
+          "id": 13536337186,
+          "sha256": "sha256:4296d4306be17e4aef9eedda326fec4c131779bc69802f457f5f87409fdad2f0"
+        },
+        {
+          "name": "uhf-formal-linux312-6-98508952b6b7ce9a94ffb484514188176f59848e",
+          "id": 13536212605,
+          "sha256": "sha256:22c83d4bed7d675b5320aafbcfea073e3b561a74369d0b0c92b3aa28a338a90d"
+        },
+        {
+          "name": "uhf-formal-linux312-10-98508952b6b7ce9a94ffb484514188176f59848e",
+          "id": 13536202624,
+          "sha256": "sha256:d4657d3918ae52d156abdcf1669ccc23b155764ea3d217246f173427a5dd9b89"
+        },
+        {
+          "name": "uhf-formal-linux312-8-98508952b6b7ce9a94ffb484514188176f59848e",
+          "id": 13536152478,
+          "sha256": "sha256:7783cac0260a5f34d06e02b045d9733e5ea4777b65305d9d994be078006d0d5a"
+        },
+        {
+          "name": "uhf-preflight-linux312-98508952b6b7ce9a94ffb484514188176f59848e",
+          "id": 13536121208,
+          "sha256": "sha256:e1758025fa6fb32497a018769d65ce213049f3254ddfc5e9ffc23ad604c60667"
+        },
+        {
+          "name": "uhf-bundle-windows313-98508952b6b7ce9a94ffb484514188176f59848e",
+          "id": 13536012670,
+          "sha256": "sha256:29632c015a63a0a26c61855d9aacd1ed83e3c5ad2b6f5e7a5b9302c8feeaea31"
+        },
+        {
+          "name": "uhf-formal-linux312-3-98508952b6b7ce9a94ffb484514188176f59848e",
+          "id": 13535729146,
+          "sha256": "sha256:0ffa5f63aa217fb277b1b6648d4c53efda40b8811a82edfdc1616b4505969644"
+        },
+        {
+          "name": "uhf-formal-windows313-2-98508952b6b7ce9a94ffb484514188176f59848e",
+          "id": 13535614841,
+          "sha256": "sha256:1319b24b114482d8d5ee767bfdd5e84ff009f575a5299634379f850422e8be67"
+        },
+        {
+          "name": "uhf-formal-linux312-9-98508952b6b7ce9a94ffb484514188176f59848e",
+          "id": 13535549500,
+          "sha256": "sha256:088fa76084c9068b6bf5366184393837b3d4a14d703febd44669f58d8c099631"
+        }
+      ]
+    },
+    {
+      "run_id": 42284337939,
+      "url": "https://github.com/psiQAQ/pyscf/actions/runs/42284337939",
+      "workflow_conclusion": "cancelled",
+      "runtime_tool_sha": "af1a268c866689faeb2632d5efe0731cb4ebfb27",
+      "platform": "linux312",
+      "formal_passed": 821,
+      "audit": "acceptance-linux-821.json",
+      "audit_sha256": "a10440c69828c3fca8c130d9ea580425d8a8245d7a81ced810a60a863ee9e9fe",
+      "archives": [
+        {
+          "name": "uhf-formal-linux312-6-af1a268c866689faeb2632d5efe0731cb4ebfb27",
+          "id": 13537900191,
+          "sha256": "sha256:7d36ddbc7d8fbb8a3d7895bf8eb1399eead6cac58e4ee4a984d391d70c44ac53"
+        },
+        {
+          "name": "uhf-formal-linux312-7-af1a268c866689faeb2632d5efe0731cb4ebfb27",
+          "id": 13537820165,
+          "sha256": "sha256:b5ccdd5f0b854d571133a9fce3fb28fb416b051e0b1cc4b1ba8094d5860f8fe8"
+        },
+        {
+          "name": "uhf-formal-linux312-4-af1a268c866689faeb2632d5efe0731cb4ebfb27",
+          "id": 13537705591,
+          "sha256": "sha256:3cdc1875d94da56b1594708593b7bc5f394000627742139f160879a72e43b35e"
+        },
+        {
+          "name": "uhf-formal-linux312-10-af1a268c866689faeb2632d5efe0731cb4ebfb27",
+          "id": 13537700366,
+          "sha256": "sha256:041578f48967c6c6dc15724e54e15ee3509aa2e32813f2d15ab43edd9506d4cc"
+        },
+        {
+          "name": "uhf-formal-linux312-1-af1a268c866689faeb2632d5efe0731cb4ebfb27",
+          "id": 13537166602,
+          "sha256": "sha256:bc0229f3f00e0afc19fa85f74871177943fab5c51cf6e46a46061e76cce3100c"
+        },
+        {
+          "name": "uhf-formal-linux312-8-af1a268c866689faeb2632d5efe0731cb4ebfb27",
+          "id": 13537102502,
+          "sha256": "sha256:6a12a6b52c43432e7bfb1b9bdd25892c8f8a05f00c5dc663a77d6a5b9d9b8d6c"
+        },
+        {
+          "name": "uhf-formal-linux312-2-af1a268c866689faeb2632d5efe0731cb4ebfb27",
+          "id": 13536704206,
+          "sha256": "sha256:918f075bb133919ea327ede98ddcc4d48cbee2951fffeaf8449e001c54e6416e"
+        },
+        {
+          "name": "uhf-formal-linux312-3-af1a268c866689faeb2632d5efe0731cb4ebfb27",
+          "id": 13536608396,
+          "sha256": "sha256:fee0851e9e0006b9b4340748d172a8a00eccfe14e7acb84f9b171df3ca883b12"
+        },
+        {
+          "name": "uhf-formal-linux312-9-af1a268c866689faeb2632d5efe0731cb4ebfb27",
+          "id": 13536348531,
+          "sha256": "sha256:b56664af7aea995a1b7cd129d1295810c73ef2111c75550cfed5dd652de353cc"
+        },
+        {
+          "name": "uhf-formal-linux312-5-af1a268c866689faeb2632d5efe0731cb4ebfb27",
+          "id": 13535859954,
+          "sha256": "sha256:43d3ce9e2ec95928001d502c532c79c67c63c1c7aab4c4d01eed96b99e4b977f"
+        }
+      ]
+    },
+    {
+      "run_id": 42286423369,
+      "url": "https://github.com/psiQAQ/pyscf/actions/runs/42286423369",
+      "workflow_conclusion": "success",
+      "runtime_tool_sha": "af1f80d392f8b9245757b66d229a1c69c02b8232",
+      "platform": "linux312",
+      "formal_passed": 179,
+      "audit": "acceptance-linux-179.json",
+      "audit_sha256": "5452fddae53f7f305a5039bd06a6e70d71d8e96b90560ef859a1858909dd1d33",
+      "archives": [
+        {
+          "name": "uhf-formal-linux312-8-af1f80d392f8b9245757b66d229a1c69c02b8232",
+          "id": 13538530437,
+          "sha256": "sha256:5d1218ef3b342a6c45766cc707c486d2b9df70b0b2898064e50d363c1c763169"
+        },
+        {
+          "name": "uhf-formal-linux312-2-af1f80d392f8b9245757b66d229a1c69c02b8232",
+          "id": 13538141636,
+          "sha256": "sha256:719ac37fb88c233cbf6fe41add2a46a57524da6e31c728172ea0ed63ce296dd6"
+        }
+      ]
+    }
+  ],
+  "preflight_and_regressions": [
+    {
+      "platform": "linux312",
+      "label": "preflight",
+      "passed": 1,
+      "nodeids": [
+        "pyscf/scf/test/test_addons.py::KnownValues::test_uhf_smearing"
+      ]
+    },
+    {
+      "platform": "linux312",
+      "label": "regressions",
+      "passed": 9,
+      "nodeids": [
+        "pyscf/scf/test/test_addons.py::KnownValues::test_rohf_smearing1",
+        "pyscf/scf/test/test_addons.py::KnownValues::test_rhf_smearing_nelec",
+        "pyscf/scf/test/test_addons.py::KnownValues::test_smearing_mu0",
+        "pyscf/pbc/scf/test/test_addons.py::KnownValues::test_krhf_smearing",
+        "pyscf/pbc/scf/test/test_addons.py::KnownValues::test_kuhf_smearing",
+        "pyscf/pbc/scf/test/test_addons.py::KnownValues::test_kuhf_smearing1",
+        "pyscf/pbc/scf/test/test_addons.py::KnownValues::test_rhf_smearing",
+        "pyscf/pbc/scf/test/test_addons.py::KnownValues::test_uhf_smearing",
+        "pyscf/pbc/scf/test/test_addons.py::KnownValues::test_smearing_for_custom_H"
+      ]
+    },
+    {
+      "platform": "windows313",
+      "label": "preflight",
+      "passed": 1,
+      "nodeids": [
+        "pyscf/scf/test/test_addons.py::KnownValues::test_uhf_smearing"
+      ]
+    },
+    {
+      "platform": "windows313",
+      "label": "regressions",
+      "passed": 9,
+      "nodeids": [
+        "pyscf/scf/test/test_addons.py::KnownValues::test_rohf_smearing1",
+        "pyscf/scf/test/test_addons.py::KnownValues::test_rhf_smearing_nelec",
+        "pyscf/scf/test/test_addons.py::KnownValues::test_smearing_mu0",
+        "pyscf/pbc/scf/test/test_addons.py::KnownValues::test_krhf_smearing",
+        "pyscf/pbc/scf/test/test_addons.py::KnownValues::test_kuhf_smearing",
+        "pyscf/pbc/scf/test/test_addons.py::KnownValues::test_kuhf_smearing1",
+        "pyscf/pbc/scf/test/test_addons.py::KnownValues::test_rhf_smearing",
+        "pyscf/pbc/scf/test/test_addons.py::KnownValues::test_uhf_smearing",
+        "pyscf/pbc/scf/test/test_addons.py::KnownValues::test_smearing_for_custom_H"
+      ]
+    }
+  ],
+  "excluded_interrupted_attempts": [
+    {
+      "run_id": 42284337939,
+      "artifact": "uhf-formal-linux312-8-af1a268c866689faeb2632d5efe0731cb4ebfb27",
+      "label": "formal",
+      "directory": "0022",
+      "status": "Not Run to completion; inspect retained logs"
+    }
+  ],
+  "thread_profiles": [
+    {
+      "platform": "linux312",
+      "pools": [
+        [
+          "openblas",
+          4
+        ],
+        [
+          "openblas",
+          4
+        ],
+        [
+          "openmp",
+          4
+        ],
+        [
+          "reference-blas",
+          1
+        ]
+      ],
+      "attempts": 1000
+    },
+    {
+      "platform": "windows313",
+      "pools": [
+        [
+          "openblas",
+          4
+        ],
+        [
+          "openblas",
+          4
+        ],
+        [
+          "openblas",
+          4
+        ],
+        [
+          "openmp",
+          4
+        ]
+      ],
+      "attempts": 200
+    }
+  ],
+  "stage_ranges": [
+    {
+      "platform": "linux312",
+      "stage": 1,
+      "count": 1000,
+      "converged": 1000,
+      "ranges": {
+        "e_tot": [
+          -244.98733143523344,
+          -244.98733143523208
+        ],
+        "e_free": [
+          -244.98733579115304,
+          -244.98733579115168
+        ],
+        "entropy": [
+          0.00043559195858688206,
+          0.0004355919586797614
+        ],
+        "cycles": [
+          16,
+          16
+        ]
+      }
+    },
+    {
+      "platform": "linux312",
+      "stage": 2,
+      "count": 1000,
+      "converged": 1000,
+      "ranges": {
+        "e_tot": [
+          -243.08699751952162,
+          -243.08699210317866
+        ],
+        "e_free": [
+          -244.7984202572187,
+          -244.79842025447962
+        ],
+        "entropy": [
+          17.114227376054416,
+          17.11428151300971
+        ],
+        "cycles": [
+          19,
+          19
+        ]
+      }
+    },
+    {
+      "platform": "windows313",
+      "stage": 1,
+      "count": 200,
+      "converged": 200,
+      "ranges": {
+        "e_tot": [
+          -244.98733143523322,
+          -244.9873314352322
+        ],
+        "e_free": [
+          -244.98733579115282,
+          -244.9873357911518
+        ],
+        "entropy": [
+          0.0004355919586277343,
+          0.00043559195868012306
+        ],
+        "cycles": [
+          16,
+          16
+        ]
+      }
+    },
+    {
+      "platform": "windows313",
+      "stage": 2,
+      "count": 200,
+      "converged": 200,
+      "ranges": {
+        "e_tot": [
+          -243.08699570583263,
+          -243.08699313210525
+        ],
+        "e_free": [
+          -244.79842025721885,
+          -244.7984202553502
+        ],
+        "entropy": [
+          17.114245513586216,
+          17.114271232449727
+        ],
+        "cycles": [
+          19,
+          19
+        ]
+      }
+    }
+  ],
+  "environments": [
+    {
+      "run_id": 42281471449,
+      "artifact": "uhf-formal-windows313-1-98508952b6b7ce9a94ffb484514188176f59848e",
+      "platform": "windows313",
+      "python": "3.13.17 (tags/v3.13.17:64e080d, Oct 21 2026, 14:08:53) [MSC v.1944 64 bit (AMD64)]",
+      "os": "Windows-2025Server-10.0.26100-SP0",
+      "packages": [
+        [
+          "Pygments",
+          "2.21.0"
+        ],
+        [
+          "colorama",
+          "0.4.6"
+        ],
+        [
+          "h5py",
+          "3.16.0"
+        ],
+        [
+          "iniconfig",
+          "2.3.1"
+        ],
+        [
+          "numpy",
+          "2.5.4"
+        ],
+        [
+          "packaging",
+          "26.3"
+        ],
+        [
+          "pip",
+          "26.2.2"
+        ],
+        [
+          "pluggy",
+          "1.7.0"
+        ],
+        [
+          "psutil",
+          "7.2.2"
+        ],
+        [
+          "pyscf",
+          "2.15.0"
+        ],
+        [
+          "pytest",
+          "8.4.2"
+        ],
+        [
+          "scipy",
+          "1.18.1"
+        ],
+        [
+          "setuptools",
+          "84.2.1"
+        ]
+      ],
+      "libxc": "7.1.2",
+      "xcfun": "2.1.1",
+      "openmp_threads": 4,
+      "native_pools": [
+        {
+          "api": "openblas",
+          "get_config": "OpenBLAS 0.3.34.106.0  USE64BITINT DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=24",
+          "get_corename": "Haswell",
+          "get_parallel": 1,
+          "num_threads": 4,
+          "path": "D:\\a\\_temp\\uhf-42281471449-formal-windows313-1\\venv\\Lib\\site-packages\\numpy.libs\\libscipy_openblas64_-ed4f167a5330424524f45258e7ca2c8d.dll",
+          "sha256": "ed4f167a5330424524f45258e7ca2c8d7f03c0cba1f30ee4985553ac1f88ecf8",
+          "symbol": "openblas_get_num_threads"
+        },
+        {
+          "api": "openmp",
+          "num_threads": 4,
+          "path": "D:\\a\\_temp\\uhf-42281471449-formal-windows313-1\\venv\\Lib\\site-packages\\pyscf\\lib\\libgomp-1.dll",
+          "sha256": "ccaf59dc8cff15ace88ab47acd68a5b014167cad8f960e7683466a4c821e41c4",
+          "symbol": "omp_get_max_threads"
+        },
+        {
+          "api": "openblas",
+          "get_config": "OpenBLAS 0.3.34 DYNAMIC_ARCH NO_AFFINITY USE_OPENMP Zen MAX_THREADS=64",
+          "get_corename": "Zen",
+          "get_parallel": 2,
+          "num_threads": 4,
+          "path": "D:\\a\\_temp\\uhf-42281471449-formal-windows313-1\\venv\\Lib\\site-packages\\pyscf\\lib\\libopenblas.dll",
+          "sha256": "4b5cbee2aba54a599a031023dcc0d99ebd24988954fe094cf59ed76c004781f6",
+          "symbol": "openblas_get_num_threads"
+        },
+        {
+          "api": "openblas",
+          "get_config": "OpenBLAS 0.3.31.dev DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=24",
+          "get_corename": "Haswell",
+          "get_parallel": 1,
+          "num_threads": 4,
+          "path": "D:\\a\\_temp\\uhf-42281471449-formal-windows313-1\\venv\\Lib\\site-packages\\scipy.libs\\libscipy_openblas-197ee2fc9b4d071f7e048078cac74115.dll",
+          "sha256": "197ee2fc9b4d071f7e048078cac741151a6585d871061cf5f88c0c73e31963a5",
+          "symbol": "scipy_openblas_get_num_threads"
+        }
+      ],
+      "source_sha": "ab749b4fd00f95a08ad00997356c9f6f77fc8674",
+      "runtime_tool_sha": "98508952b6b7ce9a94ffb484514188176f59848e",
+      "build_tool_sha": "98508952b6b7ce9a94ffb484514188176f59848e",
+      "wheel_sha256": "3b4db4e3104185bf368937a778dec6ea5206a93f6e155c49fec7d13eac08acb1",
+      "production_files_verified": 714
+    },
+    {
+      "run_id": 42281471449,
+      "artifact": "uhf-formal-windows313-2-98508952b6b7ce9a94ffb484514188176f59848e",
+      "platform": "windows313",
+      "python": "3.13.17 (tags/v3.13.17:64e080d, Oct 21 2026, 14:08:53) [MSC v.1944 64 bit (AMD64)]",
+      "os": "Windows-2025Server-10.0.26100-SP0",
+      "packages": [
+        [
+          "Pygments",
+          "2.21.0"
+        ],
+        [
+          "colorama",
+          "0.4.6"
+        ],
+        [
+          "h5py",
+          "3.16.0"
+        ],
+        [
+          "iniconfig",
+          "2.3.1"
+        ],
+        [
+          "numpy",
+          "2.5.4"
+        ],
+        [
+          "packaging",
+          "26.3"
+        ],
+        [
+          "pip",
+          "26.2.2"
+        ],
+        [
+          "pluggy",
+          "1.7.0"
+        ],
+        [
+          "psutil",
+          "7.2.2"
+        ],
+        [
+          "pyscf",
+          "2.15.0"
+        ],
+        [
+          "pytest",
+          "8.4.2"
+        ],
+        [
+          "scipy",
+          "1.18.1"
+        ],
+        [
+          "setuptools",
+          "84.2.1"
+        ]
+      ],
+      "libxc": "7.1.2",
+      "xcfun": "2.1.1",
+      "openmp_threads": 4,
+      "native_pools": [
+        {
+          "api": "openblas",
+          "get_config": "OpenBLAS 0.3.34.106.0  USE64BITINT DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=24",
+          "get_corename": "Haswell",
+          "get_parallel": 1,
+          "num_threads": 4,
+          "path": "D:\\a\\_temp\\uhf-42281471449-formal-windows313-2\\venv\\Lib\\site-packages\\numpy.libs\\libscipy_openblas64_-ed4f167a5330424524f45258e7ca2c8d.dll",
+          "sha256": "ed4f167a5330424524f45258e7ca2c8d7f03c0cba1f30ee4985553ac1f88ecf8",
+          "symbol": "openblas_get_num_threads"
+        },
+        {
+          "api": "openmp",
+          "num_threads": 4,
+          "path": "D:\\a\\_temp\\uhf-42281471449-formal-windows313-2\\venv\\Lib\\site-packages\\pyscf\\lib\\libgomp-1.dll",
+          "sha256": "ccaf59dc8cff15ace88ab47acd68a5b014167cad8f960e7683466a4c821e41c4",
+          "symbol": "omp_get_max_threads"
+        },
+        {
+          "api": "openblas",
+          "get_config": "OpenBLAS 0.3.34 DYNAMIC_ARCH NO_AFFINITY USE_OPENMP Zen MAX_THREADS=64",
+          "get_corename": "Zen",
+          "get_parallel": 2,
+          "num_threads": 4,
+          "path": "D:\\a\\_temp\\uhf-42281471449-formal-windows313-2\\venv\\Lib\\site-packages\\pyscf\\lib\\libopenblas.dll",
+          "sha256": "4b5cbee2aba54a599a031023dcc0d99ebd24988954fe094cf59ed76c004781f6",
+          "symbol": "openblas_get_num_threads"
+        },
+        {
+          "api": "openblas",
+          "get_config": "OpenBLAS 0.3.31.dev DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=24",
+          "get_corename": "Haswell",
+          "get_parallel": 1,
+          "num_threads": 4,
+          "path": "D:\\a\\_temp\\uhf-42281471449-formal-windows313-2\\venv\\Lib\\site-packages\\scipy.libs\\libscipy_openblas-197ee2fc9b4d071f7e048078cac74115.dll",
+          "sha256": "197ee2fc9b4d071f7e048078cac741151a6585d871061cf5f88c0c73e31963a5",
+          "symbol": "scipy_openblas_get_num_threads"
+        }
+      ],
+      "source_sha": "ab749b4fd00f95a08ad00997356c9f6f77fc8674",
+      "runtime_tool_sha": "98508952b6b7ce9a94ffb484514188176f59848e",
+      "build_tool_sha": "98508952b6b7ce9a94ffb484514188176f59848e",
+      "wheel_sha256": "3b4db4e3104185bf368937a778dec6ea5206a93f6e155c49fec7d13eac08acb1",
+      "production_files_verified": 714
+    },
+    {
+      "run_id": 42284337939,
+      "artifact": "uhf-formal-linux312-1-af1a268c866689faeb2632d5efe0731cb4ebfb27",
+      "platform": "linux312",
+      "python": "3.12.16 (main, Oct 26 2026, 02:48:44) [GCC 15.2.0]",
+      "os": "Linux-7.0.0-1019-azure-x86_64-with-glibc2.43",
+      "packages": [
+        [
+          "Pygments",
+          "2.21.0"
+        ],
+        [
+          "h5py",
+          "3.16.0"
+        ],
+        [
+          "iniconfig",
+          "2.3.1"
+        ],
+        [
+          "numpy",
+          "2.5.4"
+        ],
+        [
+          "packaging",
+          "26.3"
+        ],
+        [
+          "pip",
+          "25.0.1"
+        ],
+        [
+          "pluggy",
+          "1.7.0"
+        ],
+        [
+          "pyscf",
+          "2.15.0"
+        ],
+        [
+          "pytest",
+          "8.4.2"
+        ],
+        [
+          "scipy",
+          "1.18.1"
+        ],
+        [
+          "setuptools",
+          "84.2.1"
+        ]
+      ],
+      "libxc": "7.1.2",
+      "xcfun": "2.1.1",
+      "openmp_threads": 4,
+      "native_pools": [
+        {
+          "api": "openblas",
+          "get_config": "OpenBLAS 0.3.34.106.0  USE64BITINT DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=64",
+          "get_corename": "Haswell",
+          "get_parallel": 1,
+          "num_threads": 4,
+          "path": "/home/runner/work/_temp/uhf-42284337939-linux312-1/venv/lib/python3.12/site-packages/numpy.libs/libscipy_openblas64_-f48b354e.so",
+          "sha256": "432e1c1739731468ba305771af96773939e43016643e2d630f58cb45b6670e96",
+          "symbol": "scipy_openblas_get_num_threads64_"
+        },
+        {
+          "api": "openblas",
+          "get_config": "OpenBLAS 0.3.31.dev DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=64",
+          "get_corename": "Haswell",
+          "get_parallel": 1,
+          "num_threads": 4,
+          "path": "/home/runner/work/_temp/uhf-42284337939-linux312-1/venv/lib/python3.12/site-packages/scipy.libs/libscipy_openblas-5f890258.so",
+          "sha256": "2a5b4c1a6311873c59132b2ceaaf3c26258a17350b7cd27ea8782a47e3322981",
+          "symbol": "scipy_openblas_get_num_threads"
+        },
+        {
+          "api": "reference-blas",
+          "evidence": "resolved reference BLAS path; serial implementation",
+          "num_threads": 1,
+          "path": "/usr/lib/x86_64-linux-gnu/blas/libblas.so.3.12.1",
+          "sha256": "f6724a2bab54c6f82cf7d875874b5277e4ec32de7edd9a57bcb757d2ac86dc64"
+        },
+        {
+          "api": "openmp",
+          "num_threads": 4,
+          "path": "/usr/lib/x86_64-linux-gnu/libgomp.so.1.0.0",
+          "sha256": "4acd5951000051831ac7fdf3351e30687fba39d956ab472991f286be86129b84",
+          "symbol": "omp_get_max_threads"
+        }
+      ],
+      "source_sha": "ab749b4fd00f95a08ad00997356c9f6f77fc8674",
+      "runtime_tool_sha": "af1a268c866689faeb2632d5efe0731cb4ebfb27",
+      "build_tool_sha": "98508952b6b7ce9a94ffb484514188176f59848e",
+      "wheel_sha256": "b3c5c4d2d3f5346dd46aa47d9133d955244e1cf9208dc43517c215c9dee51d8b",
+      "production_files_verified": 714
+    },
+    {
+      "run_id": 42284337939,
+      "artifact": "uhf-formal-linux312-10-af1a268c866689faeb2632d5efe0731cb4ebfb27",
+      "platform": "linux312",
+      "python": "3.12.16 (main, Oct 26 2026, 02:48:44) [GCC 15.2.0]",
+      "os": "Linux-7.0.0-1019-azure-x86_64-with-glibc2.43",
+      "packages": [
+        [
+          "Pygments",
+          "2.21.0"
+        ],
+        [
+          "h5py",
+          "3.16.0"
+        ],
+        [
+          "iniconfig",
+          "2.3.1"
+        ],
+        [
+          "numpy",
+          "2.5.4"
+        ],
+        [
+          "packaging",
+          "26.3"
+        ],
+        [
+          "pip",
+          "25.0.1"
+        ],
+        [
+          "pluggy",
+          "1.7.0"
+        ],
+        [
+          "pyscf",
+          "2.15.0"
+        ],
+        [
+          "pytest",
+          "8.4.2"
+        ],
+        [
+          "scipy",
+          "1.18.1"
+        ],
+        [
+          "setuptools",
+          "84.2.1"
+        ]
+      ],
+      "libxc": "7.1.2",
+      "xcfun": "2.1.1",
+      "openmp_threads": 4,
+      "native_pools": [
+        {
+          "api": "openblas",
+          "get_config": "OpenBLAS 0.3.34.106.0  USE64BITINT DYNAMIC_ARCH NO_AFFINITY SkylakeX MAX_THREADS=64",
+          "get_corename": "SkylakeX",
+          "get_parallel": 1,
+          "num_threads": 4,
+          "path": "/home/runner/work/_temp/uhf-42284337939-linux312-10/venv/lib/python3.12/site-packages/numpy.libs/libscipy_openblas64_-f48b354e.so",
+          "sha256": "432e1c1739731468ba305771af96773939e43016643e2d630f58cb45b6670e96",
+          "symbol": "scipy_openblas_get_num_threads64_"
+        },
+        {
+          "api": "openblas",
+          "get_config": "OpenBLAS 0.3.31.dev DYNAMIC_ARCH NO_AFFINITY SkylakeX MAX_THREADS=64",
+          "get_corename": "SkylakeX",
+          "get_parallel": 1,
+          "num_threads": 4,
+          "path": "/home/runner/work/_temp/uhf-42284337939-linux312-10/venv/lib/python3.12/site-packages/scipy.libs/libscipy_openblas-5f890258.so",
+          "sha256": "2a5b4c1a6311873c59132b2ceaaf3c26258a17350b7cd27ea8782a47e3322981",
+          "symbol": "scipy_openblas_get_num_threads"
+        },
+        {
+          "api": "reference-blas",
+          "evidence": "resolved reference BLAS path; serial implementation",
+          "num_threads": 1,
+          "path": "/usr/lib/x86_64-linux-gnu/blas/libblas.so.3.12.1",
+          "sha256": "f6724a2bab54c6f82cf7d875874b5277e4ec32de7edd9a57bcb757d2ac86dc64"
+        },
+        {
+          "api": "openmp",
+          "num_threads": 4,
+          "path": "/usr/lib/x86_64-linux-gnu/libgomp.so.1.0.0",
+          "sha256": "4acd5951000051831ac7fdf3351e30687fba39d956ab472991f286be86129b84",
+          "symbol": "omp_get_max_threads"
+        }
+      ],
+      "source_sha": "ab749b4fd00f95a08ad00997356c9f6f77fc8674",
+      "runtime_tool_sha": "af1a268c866689faeb2632d5efe0731cb4ebfb27",
+      "build_tool_sha": "98508952b6b7ce9a94ffb484514188176f59848e",
+      "wheel_sha256": "b3c5c4d2d3f5346dd46aa47d9133d955244e1cf9208dc43517c215c9dee51d8b",
+      "production_files_verified": 714
+    },
+    {
+      "run_id": 42284337939,
+      "artifact": "uhf-formal-linux312-3-af1a268c866689faeb2632d5efe0731cb4ebfb27",
+      "platform": "linux312",
+      "python": "3.12.16 (main, Oct 26 2026, 02:48:44) [GCC 15.2.0]",
+      "os": "Linux-7.0.0-1019-azure-x86_64-with-glibc2.43",
+      "packages": [
+        [
+          "Pygments",
+          "2.21.0"
+        ],
+        [
+          "h5py",
+          "3.16.0"
+        ],
+        [
+          "iniconfig",
+          "2.3.1"
+        ],
+        [
+          "numpy",
+          "2.5.4"
+        ],
+        [
+          "packaging",
+          "26.3"
+        ],
+        [
+          "pip",
+          "25.0.1"
+        ],
+        [
+          "pluggy",
+          "1.7.0"
+        ],
+        [
+          "pyscf",
+          "2.15.0"
+        ],
+        [
+          "pytest",
+          "8.4.2"
+        ],
+        [
+          "scipy",
+          "1.18.1"
+        ],
+        [
+          "setuptools",
+          "84.2.1"
+        ]
+      ],
+      "libxc": "7.1.2",
+      "xcfun": "2.1.1",
+      "openmp_threads": 4,
+      "native_pools": [
+        {
+          "api": "openblas",
+          "get_config": "OpenBLAS 0.3.34.106.0  USE64BITINT DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=64",
+          "get_corename": "Haswell",
+          "get_parallel": 1,
+          "num_threads": 4,
+          "path": "/home/runner/work/_temp/uhf-42284337939-linux312-3/venv/lib/python3.12/site-packages/numpy.libs/libscipy_openblas64_-f48b354e.so",
+          "sha256": "432e1c1739731468ba305771af96773939e43016643e2d630f58cb45b6670e96",
+          "symbol": "scipy_openblas_get_num_threads64_"
+        },
+        {
+          "api": "openblas",
+          "get_config": "OpenBLAS 0.3.31.dev DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=64",
+          "get_corename": "Haswell",
+          "get_parallel": 1,
+          "num_threads": 4,
+          "path": "/home/runner/work/_temp/uhf-42284337939-linux312-3/venv/lib/python3.12/site-packages/scipy.libs/libscipy_openblas-5f890258.so",
+          "sha256": "2a5b4c1a6311873c59132b2ceaaf3c26258a17350b7cd27ea8782a47e3322981",
+          "symbol": "scipy_openblas_get_num_threads"
+        },
+        {
+          "api": "reference-blas",
+          "evidence": "resolved reference BLAS path; serial implementation",
+          "num_threads": 1,
+          "path": "/usr/lib/x86_64-linux-gnu/blas/libblas.so.3.12.1",
+          "sha256": "f6724a2bab54c6f82cf7d875874b5277e4ec32de7edd9a57bcb757d2ac86dc64"
+        },
+        {
+          "api": "openmp",
+          "num_threads": 4,
+          "path": "/usr/lib/x86_64-linux-gnu/libgomp.so.1.0.0",
+          "sha256": "4acd5951000051831ac7fdf3351e30687fba39d956ab472991f286be86129b84",
+          "symbol": "omp_get_max_threads"
+        }
+      ],
+      "source_sha": "ab749b4fd00f95a08ad00997356c9f6f77fc8674",
+      "runtime_tool_sha": "af1a268c866689faeb2632d5efe0731cb4ebfb27",
+      "build_tool_sha": "98508952b6b7ce9a94ffb484514188176f59848e",
+      "wheel_sha256": "b3c5c4d2d3f5346dd46aa47d9133d955244e1cf9208dc43517c215c9dee51d8b",
+      "production_files_verified": 714
+    },
+    {
+      "run_id": 42284337939,
+      "artifact": "uhf-formal-linux312-4-af1a268c866689faeb2632d5efe0731cb4ebfb27",
+      "platform": "linux312",
+      "python": "3.12.16 (main, Oct 26 2026, 02:48:44) [GCC 15.2.0]",
+      "os": "Linux-7.0.0-1019-azure-x86_64-with-glibc2.43",
+      "packages": [
+        [
+          "Pygments",
+          "2.21.0"
+        ],
+        [
+          "h5py",
+          "3.16.0"
+        ],
+        [
+          "iniconfig",
+          "2.3.1"
+        ],
+        [
+          "numpy",
+          "2.5.4"
+        ],
+        [
+          "packaging",
+          "26.3"
+        ],
+        [
+          "pip",
+          "25.0.1"
+        ],
+        [
+          "pluggy",
+          "1.7.0"
+        ],
+        [
+          "pyscf",
+          "2.15.0"
+        ],
+        [
+          "pytest",
+          "8.4.2"
+        ],
+        [
+          "scipy",
+          "1.18.1"
+        ],
+        [
+          "setuptools",
+          "84.2.1"
+        ]
+      ],
+      "libxc": "7.1.2",
+      "xcfun": "2.1.1",
+      "openmp_threads": 4,
+      "native_pools": [
+        {
+          "api": "openblas",
+          "get_config": "OpenBLAS 0.3.34.106.0  USE64BITINT DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=64",
+          "get_corename": "Haswell",
+          "get_parallel": 1,
+          "num_threads": 4,
+          "path": "/home/runner/work/_temp/uhf-42284337939-linux312-4/venv/lib/python3.12/site-packages/numpy.libs/libscipy_openblas64_-f48b354e.so",
+          "sha256": "432e1c1739731468ba305771af96773939e43016643e2d630f58cb45b6670e96",
+          "symbol": "scipy_openblas_get_num_threads64_"
+        },
+        {
+          "api": "openblas",
+          "get_config": "OpenBLAS 0.3.31.dev DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=64",
+          "get_corename": "Haswell",
+          "get_parallel": 1,
+          "num_threads": 4,
+          "path": "/home/runner/work/_temp/uhf-42284337939-linux312-4/venv/lib/python3.12/site-packages/scipy.libs/libscipy_openblas-5f890258.so",
+          "sha256": "2a5b4c1a6311873c59132b2ceaaf3c26258a17350b7cd27ea8782a47e3322981",
+          "symbol": "scipy_openblas_get_num_threads"
+        },
+        {
+          "api": "reference-blas",
+          "evidence": "resolved reference BLAS path; serial implementation",
+          "num_threads": 1,
+          "path": "/usr/lib/x86_64-linux-gnu/blas/libblas.so.3.12.1",
+          "sha256": "f6724a2bab54c6f82cf7d875874b5277e4ec32de7edd9a57bcb757d2ac86dc64"
+        },
+        {
+          "api": "openmp",
+          "num_threads": 4,
+          "path": "/usr/lib/x86_64-linux-gnu/libgomp.so.1.0.0",
+          "sha256": "4acd5951000051831ac7fdf3351e30687fba39d956ab472991f286be86129b84",
+          "symbol": "omp_get_max_threads"
+        }
+      ],
+      "source_sha": "ab749b4fd00f95a08ad00997356c9f6f77fc8674",
+      "runtime_tool_sha": "af1a268c866689faeb2632d5efe0731cb4ebfb27",
+      "build_tool_sha": "98508952b6b7ce9a94ffb484514188176f59848e",
+      "wheel_sha256": "b3c5c4d2d3f5346dd46aa47d9133d955244e1cf9208dc43517c215c9dee51d8b",
+      "production_files_verified": 714
+    },
+    {
+      "run_id": 42284337939,
+      "artifact": "uhf-formal-linux312-5-af1a268c866689faeb2632d5efe0731cb4ebfb27",
+      "platform": "linux312",
+      "python": "3.12.16 (main, Oct 26 2026, 02:48:44) [GCC 15.2.0]",
+      "os": "Linux-7.0.0-1019-azure-x86_64-with-glibc2.43",
+      "packages": [
+        [
+          "Pygments",
+          "2.21.0"
+        ],
+        [
+          "h5py",
+          "3.16.0"
+        ],
+        [
+          "iniconfig",
+          "2.3.1"
+        ],
+        [
+          "numpy",
+          "2.5.4"
+        ],
+        [
+          "packaging",
+          "26.3"
+        ],
+        [
+          "pip",
+          "25.0.1"
+        ],
+        [
+          "pluggy",
+          "1.7.0"
+        ],
+        [
+          "pyscf",
+          "2.15.0"
+        ],
+        [
+          "pytest",
+          "8.4.2"
+        ],
+        [
+          "scipy",
+          "1.18.1"
+        ],
+        [
+          "setuptools",
+          "84.2.1"
+        ]
+      ],
+      "libxc": "7.1.2",
+      "xcfun": "2.1.1",
+      "openmp_threads": 4,
+      "native_pools": [
+        {
+          "api": "openblas",
+          "get_config": "OpenBLAS 0.3.34.106.0  USE64BITINT DYNAMIC_ARCH NO_AFFINITY SkylakeX MAX_THREADS=64",
+          "get_corename": "SkylakeX",
+          "get_parallel": 1,
+          "num_threads": 4,
+          "path": "/home/runner/work/_temp/uhf-42284337939-linux312-5/venv/lib/python3.12/site-packages/numpy.libs/libscipy_openblas64_-f48b354e.so",
+          "sha256": "432e1c1739731468ba305771af96773939e43016643e2d630f58cb45b6670e96",
+          "symbol": "scipy_openblas_get_num_threads64_"
+        },
+        {
+          "api": "openblas",
+          "get_config": "OpenBLAS 0.3.31.dev DYNAMIC_ARCH NO_AFFINITY SkylakeX MAX_THREADS=64",
+          "get_corename": "SkylakeX",
+          "get_parallel": 1,
+          "num_threads": 4,
+          "path": "/home/runner/work/_temp/uhf-42284337939-linux312-5/venv/lib/python3.12/site-packages/scipy.libs/libscipy_openblas-5f890258.so",
+          "sha256": "2a5b4c1a6311873c59132b2ceaaf3c26258a17350b7cd27ea8782a47e3322981",
+          "symbol": "scipy_openblas_get_num_threads"
+        },
+        {
+          "api": "reference-blas",
+          "evidence": "resolved reference BLAS path; serial implementation",
+          "num_threads": 1,
+          "path": "/usr/lib/x86_64-linux-gnu/blas/libblas.so.3.12.1",
+          "sha256": "f6724a2bab54c6f82cf7d875874b5277e4ec32de7edd9a57bcb757d2ac86dc64"
+        },
+        {
+          "api": "openmp",
+          "num_threads": 4,
+          "path": "/usr/lib/x86_64-linux-gnu/libgomp.so.1.0.0",
+          "sha256": "4acd5951000051831ac7fdf3351e30687fba39d956ab472991f286be86129b84",
+          "symbol": "omp_get_max_threads"
+        }
+      ],
+      "source_sha": "ab749b4fd00f95a08ad00997356c9f6f77fc8674",
+      "runtime_tool_sha": "af1a268c866689faeb2632d5efe0731cb4ebfb27",
+      "build_tool_sha": "98508952b6b7ce9a94ffb484514188176f59848e",
+      "wheel_sha256": "b3c5c4d2d3f5346dd46aa47d9133d955244e1cf9208dc43517c215c9dee51d8b",
+      "production_files_verified": 714
+    },
+    {
+      "run_id": 42284337939,
+      "artifact": "uhf-formal-linux312-6-af1a268c866689faeb2632d5efe0731cb4ebfb27",
+      "platform": "linux312",
+      "python": "3.12.16 (main, Oct 26 2026, 02:48:44) [GCC 15.2.0]",
+      "os": "Linux-7.0.0-1019-azure-x86_64-with-glibc2.43",
+      "packages": [
+        [
+          "Pygments",
+          "2.21.0"
+        ],
+        [
+          "h5py",
+          "3.16.0"
+        ],
+        [
+          "iniconfig",
+          "2.3.1"
+        ],
+        [
+          "numpy",
+          "2.5.4"
+        ],
+        [
+          "packaging",
+          "26.3"
+        ],
+        [
+          "pip",
+          "25.0.1"
+        ],
+        [
+          "pluggy",
+          "1.7.0"
+        ],
+        [
+          "pyscf",
+          "2.15.0"
+        ],
+        [
+          "pytest",
+          "8.4.2"
+        ],
+        [
+          "scipy",
+          "1.18.1"
+        ],
+        [
+          "setuptools",
+          "84.2.1"
+        ]
+      ],
+      "libxc": "7.1.2",
+      "xcfun": "2.1.1",
+      "openmp_threads": 4,
+      "native_pools": [
+        {
+          "api": "openblas",
+          "get_config": "OpenBLAS 0.3.34.106.0  USE64BITINT DYNAMIC_ARCH NO_AFFINITY SkylakeX MAX_THREADS=64",
+          "get_corename": "SkylakeX",
+          "get_parallel": 1,
+          "num_threads": 4,
+          "path": "/home/runner/work/_temp/uhf-42284337939-linux312-6/venv/lib/python3.12/site-packages/numpy.libs/libscipy_openblas64_-f48b354e.so",
+          "sha256": "432e1c1739731468ba305771af96773939e43016643e2d630f58cb45b6670e96",
+          "symbol": "scipy_openblas_get_num_threads64_"
+        },
+        {
+          "api": "openblas",
+          "get_config": "OpenBLAS 0.3.31.dev DYNAMIC_ARCH NO_AFFINITY SkylakeX MAX_THREADS=64",
+          "get_corename": "SkylakeX",
+          "get_parallel": 1,
+          "num_threads": 4,
+          "path": "/home/runner/work/_temp/uhf-42284337939-linux312-6/venv/lib/python3.12/site-packages/scipy.libs/libscipy_openblas-5f890258.so",
+          "sha256": "2a5b4c1a6311873c59132b2ceaaf3c26258a17350b7cd27ea8782a47e3322981",
+          "symbol": "scipy_openblas_get_num_threads"
+        },
+        {
+          "api": "reference-blas",
+          "evidence": "resolved reference BLAS path; serial implementation",
+          "num_threads": 1,
+          "path": "/usr/lib/x86_64-linux-gnu/blas/libblas.so.3.12.1",
+          "sha256": "f6724a2bab54c6f82cf7d875874b5277e4ec32de7edd9a57bcb757d2ac86dc64"
+        },
+        {
+          "api": "openmp",
+          "num_threads": 4,
+          "path": "/usr/lib/x86_64-linux-gnu/libgomp.so.1.0.0",
+          "sha256": "4acd5951000051831ac7fdf3351e30687fba39d956ab472991f286be86129b84",
+          "symbol": "omp_get_max_threads"
+        }
+      ],
+      "source_sha": "ab749b4fd00f95a08ad00997356c9f6f77fc8674",
+      "runtime_tool_sha": "af1a268c866689faeb2632d5efe0731cb4ebfb27",
+      "build_tool_sha": "98508952b6b7ce9a94ffb484514188176f59848e",
+      "wheel_sha256": "b3c5c4d2d3f5346dd46aa47d9133d955244e1cf9208dc43517c215c9dee51d8b",
+      "production_files_verified": 714
+    },
+    {
+      "run_id": 42284337939,
+      "artifact": "uhf-formal-linux312-7-af1a268c866689faeb2632d5efe0731cb4ebfb27",
+      "platform": "linux312",
+      "python": "3.12.16 (main, Oct 26 2026, 02:48:44) [GCC 15.2.0]",
+      "os": "Linux-7.0.0-1019-azure-x86_64-with-glibc2.43",
+      "packages": [
+        [
+          "Pygments",
+          "2.21.0"
+        ],
+        [
+          "h5py",
+          "3.16.0"
+        ],
+        [
+          "iniconfig",
+          "2.3.1"
+        ],
+        [
+          "numpy",
+          "2.5.4"
+        ],
+        [
+          "packaging",
+          "26.3"
+        ],
+        [
+          "pip",
+          "25.0.1"
+        ],
+        [
+          "pluggy",
+          "1.7.0"
+        ],
+        [
+          "pyscf",
+          "2.15.0"
+        ],
+        [
+          "pytest",
+          "8.4.2"
+        ],
+        [
+          "scipy",
+          "1.18.1"
+        ],
+        [
+          "setuptools",
+          "84.2.1"
+        ]
+      ],
+      "libxc": "7.1.2",
+      "xcfun": "2.1.1",
+      "openmp_threads": 4,
+      "native_pools": [
+        {
+          "api": "openblas",
+          "get_config": "OpenBLAS 0.3.34.106.0  USE64BITINT DYNAMIC_ARCH NO_AFFINITY SkylakeX MAX_THREADS=64",
+          "get_corename": "SkylakeX",
+          "get_parallel": 1,
+          "num_threads": 4,
+          "path": "/home/runner/work/_temp/uhf-42284337939-linux312-7/venv/lib/python3.12/site-packages/numpy.libs/libscipy_openblas64_-f48b354e.so",
+          "sha256": "432e1c1739731468ba305771af96773939e43016643e2d630f58cb45b6670e96",
+          "symbol": "scipy_openblas_get_num_threads64_"
+        },
+        {
+          "api": "openblas",
+          "get_config": "OpenBLAS 0.3.31.dev DYNAMIC_ARCH NO_AFFINITY SkylakeX MAX_THREADS=64",
+          "get_corename": "SkylakeX",
+          "get_parallel": 1,
+          "num_threads": 4,
+          "path": "/home/runner/work/_temp/uhf-42284337939-linux312-7/venv/lib/python3.12/site-packages/scipy.libs/libscipy_openblas-5f890258.so",
+          "sha256": "2a5b4c1a6311873c59132b2ceaaf3c26258a17350b7cd27ea8782a47e3322981",
+          "symbol": "scipy_openblas_get_num_threads"
+        },
+        {
+          "api": "reference-blas",
+          "evidence": "resolved reference BLAS path; serial implementation",
+          "num_threads": 1,
+          "path": "/usr/lib/x86_64-linux-gnu/blas/libblas.so.3.12.1",
+          "sha256": "f6724a2bab54c6f82cf7d875874b5277e4ec32de7edd9a57bcb757d2ac86dc64"
+        },
+        {
+          "api": "openmp",
+          "num_threads": 4,
+          "path": "/usr/lib/x86_64-linux-gnu/libgomp.so.1.0.0",
+          "sha256": "4acd5951000051831ac7fdf3351e30687fba39d956ab472991f286be86129b84",
+          "symbol": "omp_get_max_threads"
+        }
+      ],
+      "source_sha": "ab749b4fd00f95a08ad00997356c9f6f77fc8674",
+      "runtime_tool_sha": "af1a268c866689faeb2632d5efe0731cb4ebfb27",
+      "build_tool_sha": "98508952b6b7ce9a94ffb484514188176f59848e",
+      "wheel_sha256": "b3c5c4d2d3f5346dd46aa47d9133d955244e1cf9208dc43517c215c9dee51d8b",
+      "production_files_verified": 714
+    },
+    {
+      "run_id": 42284337939,
+      "artifact": "uhf-formal-linux312-8-af1a268c866689faeb2632d5efe0731cb4ebfb27",
+      "platform": "linux312",
+      "python": "3.12.16 (main, Oct 26 2026, 02:48:44) [GCC 15.2.0]",
+      "os": "Linux-7.0.0-1019-azure-x86_64-with-glibc2.43",
+      "packages": [
+        [
+          "Pygments",
+          "2.21.0"
+        ],
+        [
+          "h5py",
+          "3.16.0"
+        ],
+        [
+          "iniconfig",
+          "2.3.1"
+        ],
+        [
+          "numpy",
+          "2.5.4"
+        ],
+        [
+          "packaging",
+          "26.3"
+        ],
+        [
+          "pip",
+          "25.0.1"
+        ],
+        [
+          "pluggy",
+          "1.7.0"
+        ],
+        [
+          "pyscf",
+          "2.15.0"
+        ],
+        [
+          "pytest",
+          "8.4.2"
+        ],
+        [
+          "scipy",
+          "1.18.1"
+        ],
+        [
+          "setuptools",
+          "84.2.1"
+        ]
+      ],
+      "libxc": "7.1.2",
+      "xcfun": "2.1.1",
+      "openmp_threads": 4,
+      "native_pools": [
+        {
+          "api": "openblas",
+          "get_config": "OpenBLAS 0.3.34.106.0  USE64BITINT DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=64",
+          "get_corename": "Haswell",
+          "get_parallel": 1,
+          "num_threads": 4,
+          "path": "/home/runner/work/_temp/uhf-42284337939-linux312-8/venv/lib/python3.12/site-packages/numpy.libs/libscipy_openblas64_-f48b354e.so",
+          "sha256": "432e1c1739731468ba305771af96773939e43016643e2d630f58cb45b6670e96",
+          "symbol": "scipy_openblas_get_num_threads64_"
+        },
+        {
+          "api": "openblas",
+          "get_config": "OpenBLAS 0.3.31.dev DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=64",
+          "get_corename": "Haswell",
+          "get_parallel": 1,
+          "num_threads": 4,
+          "path": "/home/runner/work/_temp/uhf-42284337939-linux312-8/venv/lib/python3.12/site-packages/scipy.libs/libscipy_openblas-5f890258.so",
+          "sha256": "2a5b4c1a6311873c59132b2ceaaf3c26258a17350b7cd27ea8782a47e3322981",
+          "symbol": "scipy_openblas_get_num_threads"
+        },
+        {
+          "api": "reference-blas",
+          "evidence": "resolved reference BLAS path; serial implementation",
+          "num_threads": 1,
+          "path": "/usr/lib/x86_64-linux-gnu/blas/libblas.so.3.12.1",
+          "sha256": "f6724a2bab54c6f82cf7d875874b5277e4ec32de7edd9a57bcb757d2ac86dc64"
+        },
+        {
+          "api": "openmp",
+          "num_threads": 4,
+          "path": "/usr/lib/x86_64-linux-gnu/libgomp.so.1.0.0",
+          "sha256": "4acd5951000051831ac7fdf3351e30687fba39d956ab472991f286be86129b84",
+          "symbol": "omp_get_max_threads"
+        }
+      ],
+      "source_sha": "ab749b4fd00f95a08ad00997356c9f6f77fc8674",
+      "runtime_tool_sha": "af1a268c866689faeb2632d5efe0731cb4ebfb27",
+      "build_tool_sha": "98508952b6b7ce9a94ffb484514188176f59848e",
+      "wheel_sha256": "b3c5c4d2d3f5346dd46aa47d9133d955244e1cf9208dc43517c215c9dee51d8b",
+      "production_files_verified": 714
+    },
+    {
+      "run_id": 42284337939,
+      "artifact": "uhf-formal-linux312-9-af1a268c866689faeb2632d5efe0731cb4ebfb27",
+      "platform": "linux312",
+      "python": "3.12.16 (main, Oct 26 2026, 02:48:44) [GCC 15.2.0]",
+      "os": "Linux-7.0.0-1019-azure-x86_64-with-glibc2.43",
+      "packages": [
+        [
+          "Pygments",
+          "2.21.0"
+        ],
+        [
+          "h5py",
+          "3.16.0"
+        ],
+        [
+          "iniconfig",
+          "2.3.1"
+        ],
+        [
+          "numpy",
+          "2.5.4"
+        ],
+        [
+          "packaging",
+          "26.3"
+        ],
+        [
+          "pip",
+          "25.0.1"
+        ],
+        [
+          "pluggy",
+          "1.7.0"
+        ],
+        [
+          "pyscf",
+          "2.15.0"
+        ],
+        [
+          "pytest",
+          "8.4.2"
+        ],
+        [
+          "scipy",
+          "1.18.1"
+        ],
+        [
+          "setuptools",
+          "84.2.1"
+        ]
+      ],
+      "libxc": "7.1.2",
+      "xcfun": "2.1.1",
+      "openmp_threads": 4,
+      "native_pools": [
+        {
+          "api": "openblas",
+          "get_config": "OpenBLAS 0.3.34.106.0  USE64BITINT DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=64",
+          "get_corename": "Haswell",
+          "get_parallel": 1,
+          "num_threads": 4,
+          "path": "/home/runner/work/_temp/uhf-42284337939-linux312-9/venv/lib/python3.12/site-packages/numpy.libs/libscipy_openblas64_-f48b354e.so",
+          "sha256": "432e1c1739731468ba305771af96773939e43016643e2d630f58cb45b6670e96",
+          "symbol": "scipy_openblas_get_num_threads64_"
+        },
+        {
+          "api": "openblas",
+          "get_config": "OpenBLAS 0.3.31.dev DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=64",
+          "get_corename": "Haswell",
+          "get_parallel": 1,
+          "num_threads": 4,
+          "path": "/home/runner/work/_temp/uhf-42284337939-linux312-9/venv/lib/python3.12/site-packages/scipy.libs/libscipy_openblas-5f890258.so",
+          "sha256": "2a5b4c1a6311873c59132b2ceaaf3c26258a17350b7cd27ea8782a47e3322981",
+          "symbol": "scipy_openblas_get_num_threads"
+        },
+        {
+          "api": "reference-blas",
+          "evidence": "resolved reference BLAS path; serial implementation",
+          "num_threads": 1,
+          "path": "/usr/lib/x86_64-linux-gnu/blas/libblas.so.3.12.1",
+          "sha256": "f6724a2bab54c6f82cf7d875874b5277e4ec32de7edd9a57bcb757d2ac86dc64"
+        },
+        {
+          "api": "openmp",
+          "num_threads": 4,
+          "path": "/usr/lib/x86_64-linux-gnu/libgomp.so.1.0.0",
+          "sha256": "4acd5951000051831ac7fdf3351e30687fba39d956ab472991f286be86129b84",
+          "symbol": "omp_get_max_threads"
+        }
+      ],
+      "source_sha": "ab749b4fd00f95a08ad00997356c9f6f77fc8674",
+      "runtime_tool_sha": "af1a268c866689faeb2632d5efe0731cb4ebfb27",
+      "build_tool_sha": "98508952b6b7ce9a94ffb484514188176f59848e",
+      "wheel_sha256": "b3c5c4d2d3f5346dd46aa47d9133d955244e1cf9208dc43517c215c9dee51d8b",
+      "production_files_verified": 714
+    },
+    {
+      "run_id": 42286423369,
+      "artifact": "uhf-formal-linux312-2-af1f80d392f8b9245757b66d229a1c69c02b8232",
+      "platform": "linux312",
+      "python": "3.12.16 (main, Oct 26 2026, 02:48:44) [GCC 15.2.0]",
+      "os": "Linux-7.0.0-1019-azure-x86_64-with-glibc2.43",
+      "packages": [
+        [
+          "Pygments",
+          "2.21.0"
+        ],
+        [
+          "h5py",
+          "3.16.0"
+        ],
+        [
+          "iniconfig",
+          "2.3.1"
+        ],
+        [
+          "numpy",
+          "2.5.4"
+        ],
+        [
+          "packaging",
+          "26.3"
+        ],
+        [
+          "pip",
+          "25.0.1"
+        ],
+        [
+          "pluggy",
+          "1.7.0"
+        ],
+        [
+          "pyscf",
+          "2.15.0"
+        ],
+        [
+          "pytest",
+          "8.4.2"
+        ],
+        [
+          "scipy",
+          "1.18.1"
+        ],
+        [
+          "setuptools",
+          "84.2.1"
+        ]
+      ],
+      "libxc": "7.1.2",
+      "xcfun": "2.1.1",
+      "openmp_threads": 4,
+      "native_pools": [
+        {
+          "api": "openblas",
+          "get_config": "OpenBLAS 0.3.34.106.0  USE64BITINT DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=64",
+          "get_corename": "Haswell",
+          "get_parallel": 1,
+          "num_threads": 4,
+          "path": "/home/runner/work/_temp/uhf-42286423369-linux312-2/venv/lib/python3.12/site-packages/numpy.libs/libscipy_openblas64_-f48b354e.so",
+          "sha256": "432e1c1739731468ba305771af96773939e43016643e2d630f58cb45b6670e96",
+          "symbol": "scipy_openblas_get_num_threads64_"
+        },
+        {
+          "api": "openblas",
+          "get_config": "OpenBLAS 0.3.31.dev DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=64",
+          "get_corename": "Haswell",
+          "get_parallel": 1,
+          "num_threads": 4,
+          "path": "/home/runner/work/_temp/uhf-42286423369-linux312-2/venv/lib/python3.12/site-packages/scipy.libs/libscipy_openblas-5f890258.so",
+          "sha256": "2a5b4c1a6311873c59132b2ceaaf3c26258a17350b7cd27ea8782a47e3322981",
+          "symbol": "scipy_openblas_get_num_threads"
+        },
+        {
+          "api": "reference-blas",
+          "evidence": "resolved reference BLAS path; serial implementation",
+          "num_threads": 1,
+          "path": "/usr/lib/x86_64-linux-gnu/blas/libblas.so.3.12.1",
+          "sha256": "f6724a2bab54c6f82cf7d875874b5277e4ec32de7edd9a57bcb757d2ac86dc64"
+        },
+        {
+          "api": "openmp",
+          "num_threads": 4,
+          "path": "/usr/lib/x86_64-linux-gnu/libgomp.so.1.0.0",
+          "sha256": "4acd5951000051831ac7fdf3351e30687fba39d956ab472991f286be86129b84",
+          "symbol": "omp_get_max_threads"
+        }
+      ],
+      "source_sha": "ab749b4fd00f95a08ad00997356c9f6f77fc8674",
+      "runtime_tool_sha": "af1f80d392f8b9245757b66d229a1c69c02b8232",
+      "build_tool_sha": "98508952b6b7ce9a94ffb484514188176f59848e",
+      "wheel_sha256": "b3c5c4d2d3f5346dd46aa47d9133d955244e1cf9208dc43517c215c9dee51d8b",
+      "production_files_verified": 714
+    },
+    {
+      "run_id": 42286423369,
+      "artifact": "uhf-formal-linux312-8-af1f80d392f8b9245757b66d229a1c69c02b8232",
+      "platform": "linux312",
+      "python": "3.12.16 (main, Oct 26 2026, 02:48:44) [GCC 15.2.0]",
+      "os": "Linux-7.0.0-1019-azure-x86_64-with-glibc2.43",
+      "packages": [
+        [
+          "Pygments",
+          "2.21.0"
+        ],
+        [
+          "h5py",
+          "3.16.0"
+        ],
+        [
+          "iniconfig",
+          "2.3.1"
+        ],
+        [
+          "numpy",
+          "2.5.4"
+        ],
+        [
+          "packaging",
+          "26.3"
+        ],
+        [
+          "pip",
+          "25.0.1"
+        ],
+        [
+          "pluggy",
+          "1.7.0"
+        ],
+        [
+          "pyscf",
+          "2.15.0"
+        ],
+        [
+          "pytest",
+          "8.4.2"
+        ],
+        [
+          "scipy",
+          "1.18.1"
+        ],
+        [
+          "setuptools",
+          "84.2.1"
+        ]
+      ],
+      "libxc": "7.1.2",
+      "xcfun": "2.1.1",
+      "openmp_threads": 4,
+      "native_pools": [
+        {
+          "api": "openblas",
+          "get_config": "OpenBLAS 0.3.34.106.0  USE64BITINT DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=64",
+          "get_corename": "Haswell",
+          "get_parallel": 1,
+          "num_threads": 4,
+          "path": "/home/runner/work/_temp/uhf-42286423369-linux312-8/venv/lib/python3.12/site-packages/numpy.libs/libscipy_openblas64_-f48b354e.so",
+          "sha256": "432e1c1739731468ba305771af96773939e43016643e2d630f58cb45b6670e96",
+          "symbol": "scipy_openblas_get_num_threads64_"
+        },
+        {
+          "api": "openblas",
+          "get_config": "OpenBLAS 0.3.31.dev DYNAMIC_ARCH NO_AFFINITY Haswell MAX_THREADS=64",
+          "get_corename": "Haswell",
+          "get_parallel": 1,
+          "num_threads": 4,
+          "path": "/home/runner/work/_temp/uhf-42286423369-linux312-8/venv/lib/python3.12/site-packages/scipy.libs/libscipy_openblas-5f890258.so",
+          "sha256": "2a5b4c1a6311873c59132b2ceaaf3c26258a17350b7cd27ea8782a47e3322981",
+          "symbol": "scipy_openblas_get_num_threads"
+        },
+        {
+          "api": "reference-blas",
+          "evidence": "resolved reference BLAS path; serial implementation",
+          "num_threads": 1,
+          "path": "/usr/lib/x86_64-linux-gnu/blas/libblas.so.3.12.1",
+          "sha256": "f6724a2bab54c6f82cf7d875874b5277e4ec32de7edd9a57bcb757d2ac86dc64"
+        },
+        {
+          "api": "openmp",
+          "num_threads": 4,
+          "path": "/usr/lib/x86_64-linux-gnu/libgomp.so.1.0.0",
+          "sha256": "4acd5951000051831ac7fdf3351e30687fba39d956ab472991f286be86129b84",
+          "symbol": "omp_get_max_threads"
+        }
+      ],
+      "source_sha": "ab749b4fd00f95a08ad00997356c9f6f77fc8674",
+      "runtime_tool_sha": "af1f80d392f8b9245757b66d229a1c69c02b8232",
+      "build_tool_sha": "98508952b6b7ce9a94ffb484514188176f59848e",
+      "wheel_sha256": "b3c5c4d2d3f5346dd46aa47d9133d955244e1cf9208dc43517c215c9dee51d8b",
+      "production_files_verified": 714
+    }
+  ]
+}

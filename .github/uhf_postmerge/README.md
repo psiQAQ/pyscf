@@ -1,5 +1,12 @@
 # UHF #3410 final implementation verification
 
+Final acceptance: **Passed**, with 1000/1000 Linux Python 3.12.16 and
+200/200 Windows Python 3.13.17 fresh-process full-node samples. Both platforms
+also passed the preflight and all nine selected molecular/PBC regressions.
+See [RESULTS.md](RESULTS.md) for run boundaries and retained failures, and
+[acceptance-summary.json](acceptance-summary.json) for the machine-readable
+provenance, environments and actual thread counts. No scientific source changed.
+
 This fork-only workflow tests source baseline
 `ab749b4fd00f95a08ad00997356c9f6f77fc8674` (B), which contains merge
 `fd6b6898a3d06fa0628f9d8544476a856dc711a8` of final head
@@ -71,6 +78,13 @@ passed; partial artifact integrity is not full acceptance.
 For an explicitly cancelled partial run, `--allow-incomplete` audits completed
 records while reporting incomplete shards and unrecorded attempts separately.
 It never counts an interrupted or missing result as a pass.
+
+`assemble_acceptance.py` joins the three audited formal sample sets, checks
+unique sample/process records, and requires exactly 1000 Linux plus 200 Windows
+passes. It retains the interrupted attempt separately and records the initial
+preflights and nine original regression nodeids on each platform. The full output
+includes a per-attempt hash index; its smaller summary is published on this
+verification branch. Both outputs bind the assembler and audit script hashes.
 
 Example from this task, run at the verification checkout root:
 
