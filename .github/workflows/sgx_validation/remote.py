@@ -13,7 +13,7 @@ import traceback
 HERE = Path(__file__).resolve().parent
 VALIDATION = HERE.parents[2]
 CONFIG = json.loads((HERE / 'config.json').read_text())
-INPUTS = ['pyscf', 'setup.py', 'pyproject.toml', 'MANIFEST.in', '.gitattributes',
+INPUTS = ['pyscf', 'setup.py', 'pyproject.toml', 'MANIFEST.in', '.gitattributes', 'pytest.ini',
           '.github/workflows/ci_windows', '.github/workflows/ci_linux']
 
 
@@ -44,7 +44,7 @@ def main():
         scratch = output / 'scratch'
         scratch.mkdir()
         with Path(os.environ['GITHUB_ENV']).open('a', encoding='utf-8') as env_file:
-            for key in ['RUNNER_TEMP', 'TMP', 'TEMP', 'TMPDIR', 'PYSCF_TMPDIR']:
+            for key in ['TMP', 'TEMP', 'TMPDIR', 'PYSCF_TMPDIR']:
                 env_file.write(key + '=' + str(scratch) + '\n')
         source_sha = git(candidate, 'rev-parse', 'HEAD')
         assert source_sha == CONFIG['science_sha']
@@ -64,6 +64,8 @@ def main():
         return 0
 
     assert evidence.is_dir()
+    for key in ['RUNNER_TEMP', 'TMP', 'TEMP', 'TMPDIR', 'PYSCF_TMPDIR']:
+        os.environ[key] = str(output / 'scratch')
     commands = []
 
     def run(label, command, cwd=output):
@@ -111,6 +113,7 @@ def main():
                        for p in native_files if p.is_file()})
         results = []
         for suite in CONFIG['suites']:
+            expected_tests = {'lifecycle': 4, 'forwarding': 4, 'rks': 1, 'uks': 1, 'sgx': 8}[suite]
             count = repeats if suite == 'rks' else 1
             result_dir = evidence / suite
             run('tests-' + suite, [python, '-I', '-B', HERE / 'validate.py', '--test-root', candidate,
@@ -120,7 +123,7 @@ def main():
             assert summary['result'] == 'Passed' and len(summary['attempts']) == count
             for i in range(1, count + 1):
                 attempt = json.loads((result_dir / ('attempt-%04d' % i) / 'result.json').read_text())
-                assert attempt['tests_run'] == attempt['expected_tests'] > 0
+                assert attempt['tests_run'] == attempt['expected_tests'] == expected_tests
                 assert not attempt['skipped'] and not attempt['failures'] and not attempt['errors']
                 assert attempt['source_sha'] == CONFIG['science_sha']
                 assert attempt['openmp_threads'] == 4
