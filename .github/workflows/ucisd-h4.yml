@@ -36,7 +36,7 @@ jobs:
           gh run download 42281855545 --repo psiQAQ/pyscf
           --name ucisd-h4-c05e968f4bd46d3f3eb1d99d11ca7fe9967e5c63-windows-wheel
           --dir tmp/ucisd-h4-input
-      - name: Capture the first failure in at most ten fresh H4 processes
+      - name: Capture the first failure in at most 100 fresh H4 processes
         run: |
           $scratch = Join-Path $env:RUNNER_TEMP 'ucisd-h4-${{ github.run_id }}'
           New-Item -ItemType Directory -Path $scratch | Out-Null
@@ -49,7 +49,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: ucisd-h4-${{ github.sha }}-windows-py31317-postmortem-10
+          name: ucisd-h4-${{ github.sha }}-windows-py31317-postmortem-100
           if-no-files-found: error
           include-hidden-files: true
           path: tmp/ucisd-h4-capture/**

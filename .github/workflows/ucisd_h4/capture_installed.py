@@ -1,4 +1,4 @@
-"""Reuse the preserved Windows wheel; stop at first H4 failure or ten processes."""
+"""Reuse the preserved Windows wheel; stop at first H4 failure or 100 processes."""
 import hashlib
 import json
 import os
@@ -41,7 +41,7 @@ commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repo, text=Tr
 (report / 'input.json').write_text(json.dumps({'diagnostic_commit': commit,
     'wheel_source_commit': 'c05e968f4bd46d3f3eb1d99d11ca7fe9967e5c63',
     'wheel_source_run': 42281855545, 'wheel_source_artifact': 13538202274,
-    'wheel_sha256': wheel_sha, 'maximum_h4_processes': 10}, indent=2) + '\n', encoding='utf-8')
+    'wheel_sha256': wheel_sha, 'maximum_h4_processes': 100}, indent=2) + '\n', encoding='utf-8')
 env = run / '.venv'
 venv.EnvBuilder(with_pip=True).create(env)
 python = env / 'Scripts/python.exe'
@@ -73,7 +73,7 @@ base = [python, '-B', '-m', 'pytest', '-s', '-v', '-c', str(repo / 'pytest.ini')
         '--rootdir', '.', '--import-mode=prepend', '-p', 'no:cacheprovider',
         '-p', '_ucisd_postmortem', 'pyscf/ci/test/test_ucisd.py::KnownValues::test_h4']
 outcomes = []
-for attempt in range(1, 11):
+for attempt in range(1, 101):
     label = f'h4-{attempt:02d}'
     case = report / label
     case.mkdir()
@@ -98,4 +98,4 @@ for attempt in range(1, 11):
         print('Stopped at', label, 'captured', captured, 'capture_error', capture_error, flush=True)
         raise SystemExit(code or 1)
     assert not (case / 'failure').exists(), 'Successful test unexpectedly wrote a snapshot'
-print('Reached ten passing H4 processes; no failure captured.', flush=True)
+print('Reached 100 passing H4 processes; no failure captured.', flush=True)
