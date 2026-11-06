@@ -76,6 +76,8 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          & "${{ steps.msys2.outputs.msys2-location }}\usr\bin\pacman.exe" -Q | Out-File "$env:SGX_RUN_ROOT/evidence/msys2-packages.txt" -Encoding utf8
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -m pip install build wheel setuptools 'cmake<4' ninja
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -m pip freeze | Out-File "$env:SGX_RUN_ROOT/evidence/build-packages.txt" -Encoding utf8
@@ -98,6 +100,7 @@ jobs:
         run: |
           set -euo pipefail
           bash candidate/.github/workflows/ci_linux/deps_apt.sh
+          dpkg-query -W gcc g++ gfortran libblas-dev liblapack-dev cmake > "$SGX_RUN_ROOT/evidence/system-packages.txt"
           python -m pip install numpy scipy h5py setuptools wheel 'cmake<4'
           python -m pip freeze > "$SGX_RUN_ROOT/evidence/build-packages.txt"
           cmake -S candidate/pyscf/lib -B "$SGX_RUN_ROOT/native-build" -DBUILD_LIBXC=ON -DBUILD_LIBCINT=ON -DBUILD_XCFUN=ON -DXCFUN_MAX_ORDER=4 2>&1 | tee "$SGX_RUN_ROOT/evidence/cmake-configure.log"
