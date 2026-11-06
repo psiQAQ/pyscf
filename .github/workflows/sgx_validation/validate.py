@@ -40,7 +40,7 @@ def thread_queries():
         if not any(name in path.lower() for name in ['openblas', 'libblas', 'libgomp', 'mkl_rt']):
             continue
         library = ctypes.CDLL(path)
-        row = {'path': path, 'sha256': digest(path), 'getters': {}}
+        row = {'path': path, 'sha256': digest(path), 'getters': {}, 'configurations': {}}
         for symbol in ['openblas_get_num_threads', 'scipy_openblas_get_num_threads',
                        'scipy_openblas_get_num_threads64_', 'openblas_get_num_threads64_',
                        'omp_get_max_threads', 'MKL_Get_Max_Threads']:
@@ -51,6 +51,12 @@ def thread_queries():
             getter.argtypes = []
             getter.restype = ctypes.c_int
             row['getters'][symbol] = getter()
+            if 'openblas_get_num_threads' in symbol:
+                config_symbol = symbol.replace('get_num_threads', 'get_config')
+                get_config = getattr(library, config_symbol)
+                get_config.argtypes = []
+                get_config.restype = ctypes.c_char_p
+                row['configurations'][config_symbol] = get_config().decode()
         result.append(row)
     return result
 
