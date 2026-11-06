@@ -1,0 +1,120 @@
+name: SGX RSH validation 20261107
+
+on:
+  push:
+    branches:
+      - 'codex/validate/sgx-*-20261107'
+    paths:
+      - '.github/workflows/sgx-validation.yml'
+      - '.github/workflows/sgx_validation/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sgx-rsh-${{ github.ref }}-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 180
+    env:
+      OMP_NUM_THREADS: '4'
+      OPENBLAS_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+      BLIS_NUM_THREADS: '1'
+      VECLIB_MAXIMUM_THREADS: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+      SGX_RUN_ROOT: ${{ runner.temp }}/sgx-${{ github.sha }}-${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: validation
+          persist-credentials: false
+
+      - name: Read exact scientific candidate
+        id: candidate
+        shell: pwsh
+        run: |
+          $config = Get-Content validation/.github/workflows/sgx_validation/config.json -Raw | ConvertFrom-Json
+          "sha=$($config.science_sha)" >> $env:GITHUB_OUTPUT
+          "label=$($config.topic)-$($config.stage)" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.candidate.outputs.sha }}
+          path: candidate
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Check source and build input identity
+        shell: pwsh
+        run: >-
+          python -I -B validation/.github/workflows/sgx_validation/remote.py prepare
+          --candidate "$env:GITHUB_WORKSPACE/candidate" --output "$env:SGX_RUN_ROOT"
+
+      - name: Set up MSYS2 UCRT64
+        if: runner.os == 'Windows'
+        id: msys2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-openblas
+
+      - name: Install declared Windows build tools
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python -m pip install build wheel setuptools 'cmake<4' ninja
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m pip freeze | Out-File "$env:SGX_RUN_ROOT/evidence/build-packages.txt" -Encoding utf8
+
+      - name: Build exact Windows candidate wheel
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          try {
+            ./candidate/.github/workflows/ci_windows/build_wheel.ps1 -RuntimeDllDir "${{ steps.msys2.outputs.msys2-location }}\ucrt64\bin"
+          } finally {
+            if (Test-Path candidate/tmp/windows-installed-wheel) {
+              Copy-Item candidate/tmp/windows-installed-wheel "$env:SGX_RUN_ROOT/evidence/windows-build" -Recurse
+            }
+          }
+
+      - name: Build Linux candidate from source
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash candidate/.github/workflows/ci_linux/deps_apt.sh
+          python -m pip install numpy scipy h5py setuptools wheel 'cmake<4'
+          python -m pip freeze > "$SGX_RUN_ROOT/evidence/build-packages.txt"
+          cmake -S candidate/pyscf/lib -B "$SGX_RUN_ROOT/native-build" -DBUILD_LIBXC=ON -DBUILD_LIBCINT=ON -DBUILD_XCFUN=ON -DXCFUN_MAX_ORDER=4 2>&1 | tee "$SGX_RUN_ROOT/evidence/cmake-configure.log"
+          cmake --build "$SGX_RUN_ROOT/native-build" -j4 2>&1 | tee "$SGX_RUN_ROOT/evidence/cmake-build.log"
+
+      - name: Run exact SGX tests and audit evidence
+        shell: pwsh
+        run: >-
+          python -I -B validation/.github/workflows/sgx_validation/remote.py run
+          --candidate "$env:GITHUB_WORKSPACE/candidate" --output "$env:SGX_RUN_ROOT"
+
+      - name: Preserve first result and build logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sgx-${{ steps.candidate.outputs.label }}-${{ github.sha }}-${{ matrix.os }}-py313-omp4
+          path: ${{ env.SGX_RUN_ROOT }}/evidence/**
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 90
