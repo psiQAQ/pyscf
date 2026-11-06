@@ -1,0 +1,183 @@
+name: UHF postmerge 20261107
+
+on:
+  push:
+    branches: [codex/verify/uhf-postmerge-20261107]
+    paths: [.github/uhf_postmerge/**, .github/workflows/uhf-postmerge-20261107.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: uhf-postmerge-20261107-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    if: github.repository == 'psiQAQ/pyscf' && github.ref == 'refs/heads/codex/verify/uhf-postmerge-20261107'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-latest, python: '3.12', label: linux312}
+          - {os: windows-latest, python: '3.13', label: windows313}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+      CMAKE_BUILD_PARALLEL_LEVEL: '4'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Isolate task directories
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / ('uhf-' + os.environ['GITHUB_RUN_ID'] + '-preflight-${{ matrix.label }}')
+          scratch = root / 'scratch'
+          scratch.mkdir(parents=True, exist_ok=False)
+          (root / 'evidence').mkdir()
+          with open(os.environ['GITHUB_ENV'], 'a') as f:
+              for key, value in {'UHF_ROOT': root, 'RUNNER_TEMP': scratch, 'TMP': scratch, 'TEMP': scratch, 'TMPDIR': scratch, 'PYSCF_TMPDIR': scratch, 'PIP_CACHE_DIR': root / 'pip-cache'}.items():
+                  f.write(f'{key}={value}\n')
+      - name: Install existing build tools
+        run: python -m pip install build wheel setuptools 'cmake<4' ninja
+      - name: Set up MSYS2 UCRT64
+        if: runner.os == 'Windows'
+        id: msys2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-openblas
+      - name: Build Windows wheel using the baseline script
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: >-
+          ./.github/workflows/ci_windows/build_wheel.ps1
+          -RuntimeDllDir '${{ steps.msys2.outputs.msys2-location }}\ucrt64\bin'
+          -ReportDirectory tmp/uhf-build
+      - name: Build Linux wheel using existing dependency source and CMake options
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash .github/workflows/ci_linux/deps_apt.sh
+          curl --fail -L 'https://github.com/pyscf/pyscf-build-deps/blob/master/pyscf-2.14.1-deps.tar.gz?raw=true' -o "$UHF_ROOT/evidence/pyscf-build-deps.tar.gz"
+          sha256sum "$UHF_ROOT/evidence/pyscf-build-deps.tar.gz" > "$UHF_ROOT/evidence/build-deps.sha256"
+          tar xzf "$UHF_ROOT/evidence/pyscf-build-deps.tar.gz" -C pyscf/lib
+          export CMAKE_CONFIGURE_ARGS='-DBUILD_LIBXC=OFF -DBUILD_XCFUN=ON -DBUILD_LIBCINT=OFF -DXCFUN_MAX_ORDER=4'
+          python -m build --wheel --no-isolation 2>&1 | tee "$UHF_ROOT/evidence/build.log"
+      - name: Bind wheel and unchanged sources
+        shell: pwsh
+        run: |
+          python .github/uhf_postmerge/verify.py bundle --root $env:UHF_ROOT
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m pip freeze --all | Set-Content -Encoding utf8 "$env:UHF_ROOT/evidence/build-environment.txt"
+      - name: Install outside the source checkout
+        shell: pwsh
+        run: |
+          python .github/uhf_postmerge/verify.py install --root $env:UHF_ROOT 2>&1 | Tee-Object "$env:UHF_ROOT/evidence/install.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Full-node minimal preflight and artifact gate
+        shell: pwsh
+        run: |
+          python .github/uhf_postmerge/verify.py sweep --root $env:UHF_ROOT --label preflight --repeats 1 --stop-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Existing molecular and PBC smearing regressions
+        shell: pwsh
+        run: |
+          python .github/uhf_postmerge/verify.py sweep --root $env:UHF_ROOT --label regressions --repeats 1 --regressions
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload wheel and provenance for formal shards
+        uses: actions/upload-artifact@v7
+        with:
+          name: uhf-bundle-${{ matrix.label }}-${{ github.sha }}
+          path: ${{ env.UHF_ROOT }}/bundle/**
+          if-no-files-found: error
+          retention-days: 90
+      - name: Retain all preflight evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: uhf-preflight-${{ matrix.label }}-${{ github.sha }}
+          path: |
+            ${{ env.UHF_ROOT }}/evidence/**
+            tmp/uhf-build/**
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 90
+
+  formal:
+    needs: preflight
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-latest, python: '3.12', label: linux312, shard: 1, repeats: 100}
+          - {os: ubuntu-latest, python: '3.12', label: linux312, shard: 2, repeats: 100}
+          - {os: ubuntu-latest, python: '3.12', label: linux312, shard: 3, repeats: 100}
+          - {os: ubuntu-latest, python: '3.12', label: linux312, shard: 4, repeats: 100}
+          - {os: ubuntu-latest, python: '3.12', label: linux312, shard: 5, repeats: 100}
+          - {os: ubuntu-latest, python: '3.12', label: linux312, shard: 6, repeats: 100}
+          - {os: ubuntu-latest, python: '3.12', label: linux312, shard: 7, repeats: 100}
+          - {os: ubuntu-latest, python: '3.12', label: linux312, shard: 8, repeats: 100}
+          - {os: ubuntu-latest, python: '3.12', label: linux312, shard: 9, repeats: 100}
+          - {os: ubuntu-latest, python: '3.12', label: linux312, shard: 10, repeats: 100}
+          - {os: windows-latest, python: '3.13', label: windows313, shard: 1, repeats: 100}
+          - {os: windows-latest, python: '3.13', label: windows313, shard: 2, repeats: 100}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 180
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Isolate task directories
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / ('uhf-' + os.environ['GITHUB_RUN_ID'] + '-formal-${{ matrix.label }}-${{ matrix.shard }}')
+          scratch = root / 'scratch'
+          scratch.mkdir(parents=True, exist_ok=False)
+          (root / 'evidence').mkdir()
+          with open(os.environ['GITHUB_ENV'], 'a') as f:
+              for key, value in {'UHF_ROOT': root, 'RUNNER_TEMP': scratch, 'TMP': scratch, 'TEMP': scratch, 'TMPDIR': scratch, 'PYSCF_TMPDIR': scratch, 'PIP_CACHE_DIR': root / 'pip-cache'}.items():
+                  f.write(f'{key}={value}\n')
+      - uses: actions/download-artifact@v7
+        with:
+          name: uhf-bundle-${{ matrix.label }}-${{ github.sha }}
+          path: ${{ env.UHF_ROOT }}/bundle
+      - name: Install identical wheel and dependency versions
+        shell: pwsh
+        run: |
+          python .github/uhf_postmerge/verify.py install --root $env:UHF_ROOT 2>&1 | Tee-Object "$env:UHF_ROOT/evidence/install.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Fresh-process formal sweep
+        shell: pwsh
+        run: |
+          python .github/uhf_postmerge/verify.py sweep --root $env:UHF_ROOT --label formal --repeats ${{ matrix.repeats }}
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Retain every attempt including failures
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: uhf-formal-${{ matrix.label }}-${{ matrix.shard }}-${{ github.sha }}
+          path: ${{ env.UHF_ROOT }}/evidence/**
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 90
