@@ -132,7 +132,8 @@ class EvidencePlugin:
 def child(args):
     import pytest
     import pyscf
-    from pyscf.scf import hf, smearing
+    from pyscf.scf import hf
+    from pyscf.scf.smearing import _SmearingSCF
 
     root = args.root.resolve()
     installation = json.loads((root / 'installation.json').read_text())
@@ -145,7 +146,7 @@ def child(args):
     # This profiler observes return values and frame locals. It never replaces a
     # scientific method, sets a callback, or changes an SCF input/return value.
     checks, stages, objects = [], [], {}
-    check_code = smearing._SmearingSCF.check_convergence.__code__
+    check_code = _SmearingSCF.check_convergence.__code__
     kernel_code = hf.kernel.__code__
 
     def profile(frame, event, value):
@@ -169,7 +170,7 @@ def child(args):
             })
         elif frame.f_code is kernel_code:
             mf = frame.f_locals['mf']
-            if isinstance(mf, smearing._SmearingSCF) and value is not None:
+            if isinstance(mf, _SmearingSCF) and value is not None:
                 stages.append({
                     'stage': objects.setdefault(id(mf), len(objects) + 1),
                     'e_tot': float(value[1]), 'e_free': mf.e_free,
