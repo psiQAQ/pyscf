@@ -15,12 +15,21 @@ the current Windows verifier does not accept its `Precision*` parameters.
 The full workflow is explicitly triggered by creating or updating
 `start-full-run.txt` in this directory. The separate Linux resume workflow
 reuses the wheel from run 42281471449, installs the existing native Linux
-dependencies on each fresh runner, and gates each 100-attempt shard with a
+dependencies on each fresh runner, and gates each planned shard with a
 full-node preflight. The first formal Linux run omitted those native packages:
 all attempts stopped at import with missing `libblas.so.3`, before pytest ran.
 Those failures remain preserved; Windows's independent evidence is retained.
 The runtime manifest records both the wheel builder's tool SHA and the current
 verification tool SHA when an existing wheel is reused.
+
+Run 42284337939 completed eight 100-attempt shards. During cancellation of two
+slow dependency-install jobs, shard 8 had advanced and completed 21 passing
+attempts; attempt 22 was interrupted and is retained without counting it as a
+pass. Shard 2 executed no test. The final continuation therefore schedules 100
+attempts for shard 2 and 79 for shard 8, preserving all 821 completed samples.
+It installs only the runtime BLAS/LAPACK subset already supplied by the existing
+CI dependencies, with bounded download retries. No wheel or scientific source
+is rebuilt or changed.
 
 Both platform preflights must pass the entire explicit node
 `pyscf/scf/test/test_addons.py::KnownValues::test_uhf_smearing` (both Fe2 stages),
@@ -48,6 +57,33 @@ packages, runner image, actual thread counts, process IDs, exact nodes,
 per-attempt logs/JUnit/results and executed counts. Temp variables and caches
 are private to each task runner/process. Evidence is retained for 90 days and
 should also be downloaded to the task's local evidence directory.
+
+`collect_run.py` uses the authenticated `gh` CLI to preserve raw artifact ZIPs,
+verify GitHub's SHA-256 digests, extract without overwriting different evidence,
+and retain workflow/job metadata and logs. Its required `--output-root` must
+point to a task-owned ignored directory. `audit_evidence.py` checks records,
+original node execution, JUnit counts, both Fe2 stages, convergence decisions,
+thread APIs, scratch isolation and wheel/source/tool provenance. `--platform`
+explicitly scopes an audit when a run contains valid results on one platform
+and retained infrastructure failures on the other. Audit JSON reports that scope.
+`--expect-formal` rejects an incomplete total even when every downloaded record
+passed; partial artifact integrity is not full acceptance.
+For an explicitly cancelled partial run, `--allow-incomplete` audits completed
+records while reporting incomplete shards and unrecorded attempts separately.
+It never counts an interrupted or missing result as a pass.
+
+Example from this task, run at the verification checkout root:
+
+```text
+python .github/uhf_postmerge/collect_run.py 42281471449 --output-root tmp/uhf-evidence
+python .github/uhf_postmerge/audit_evidence.py tmp/uhf-evidence/42281471449 --platform windows313 --expect-formal 200 --output tmp/uhf-windows-audit.json
+```
+
+Windows records both the venv redirector's launcher PID and the actual Python
+interpreter PID. They may differ because [CPython's Windows venv launcher](https://github.com/python/cpython/blob/3.13/PC/venvlauncher.c)
+starts the base interpreter. The audit checks that the runtime PID is stable
+within each attempt, preserving both observations without treating them as the
+same process.
 
 ## Notes
 

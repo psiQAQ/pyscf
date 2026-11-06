@@ -20,7 +20,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        include:
+          - {shard: 2, repeats: 100}
+          - {shard: 8, repeats: 79}
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
@@ -44,11 +46,14 @@ jobs:
               for key, value in {'UHF_ROOT': root, 'RUNNER_TEMP': scratch, 'TMP': scratch, 'TEMP': scratch, 'TMPDIR': scratch, 'PYSCF_TMPDIR': scratch, 'PIP_CACHE_DIR': root / 'pip-cache'}.items():
                   f.write(f'{key}={value}\n')
       - name: Install existing Linux native dependencies
+        timeout-minutes: 5
         shell: bash
         run: |
           set -euo pipefail
-          bash .github/workflows/ci_linux/deps_apt.sh 2>&1 | tee "$UHF_ROOT/evidence/native-dependencies.log"
-          dpkg-query -W libblas3 libblas-dev liblapack3 liblapack-dev libgomp1 > "$UHF_ROOT/evidence/native-package-versions.txt"
+          # Runtime subset of the existing libblas-dev/liblapack-dev CI dependencies.
+          # The wheel is already built; compiler/CMake installation is unnecessary.
+          sudo apt-get -qq -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install libblas3 liblapack3 2>&1 | tee "$UHF_ROOT/evidence/native-dependencies.log"
+          dpkg-query -W libblas3 liblapack3 libgomp1 > "$UHF_ROOT/evidence/native-package-versions.txt"
       - name: Download the already validated baseline wheel
         uses: actions/download-artifact@v7
         with:
@@ -64,9 +69,9 @@ jobs:
       - name: Full-node preflight on this fresh runner
         shell: bash
         run: python .github/uhf_postmerge/verify.py sweep --root "$UHF_ROOT" --label runner-preflight --repeats 1 --stop-on-failure
-      - name: 100 fresh-process attempts on the unchanged source
+      - name: Remaining fresh-process attempts on the unchanged source
         shell: bash
-        run: python .github/uhf_postmerge/verify.py sweep --root "$UHF_ROOT" --label formal --repeats 100
+        run: python .github/uhf_postmerge/verify.py sweep --root "$UHF_ROOT" --label formal --repeats ${{ matrix.repeats }}
       - name: Retain every attempt and any failure
         if: always()
         uses: actions/upload-artifact@v7
