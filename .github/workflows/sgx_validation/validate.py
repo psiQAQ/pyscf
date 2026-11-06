@@ -28,6 +28,35 @@ def now():
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
 
+def reference_blas_threads(path):
+    """Identify the serial Debian/Ubuntu reference BLAS without inventing a getter."""
+    library = Path(path)
+    assert os.name != 'nt' and library.parent.name == 'blas'
+    assert library.name.startswith('libblas.so.')
+    evidence = {'implementation': 'lapack-reference-blas', 'num_threads': 1, 'commands': []}
+
+    def query(command):
+        proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        stdout, stderr = proc.communicate()
+        evidence['commands'].append({'command': command, 'pid': proc.pid,
+            'exit_code': proc.returncode, 'stdout': stdout, 'stderr': stderr})
+        assert proc.returncode == 0, (command, stderr)
+        return stdout.strip()
+
+    owner = query(['dpkg-query', '--search', path]).rsplit(': ', 1)[0]
+    assert owner.split(':')[0] == 'libblas3', owner
+    package = query(['dpkg-query', '-W', '-f=${source:Package}\t${Version}\t${Status}', owner])
+    assert package.split('\t')[0] == 'lapack' and package.endswith('install ok installed'), package
+    assert not query(['dpkg', '--verify', owner]), 'Reference BLAS package was modified'
+    # Reference BLAS has no thread-control API. Corroborate package identity
+    # against the actual loaded binary, rather than treating any missing getter as serial.
+    symbols = query(['nm', '-D', '--undefined-only', path])
+    names = [line.split()[-1].split('@')[0].lower() for line in symbols.splitlines() if line.split()]
+    assert not any(name.startswith(('pthread_', 'gomp_', 'omp_', '__kmpc', 'thrd_', 'clone', '__clone'))
+                   for name in names)
+    return evidence
+
+
 def thread_queries():
     if os.name == 'nt':
         import psutil
@@ -57,6 +86,8 @@ def thread_queries():
                 get_config.argtypes = []
                 get_config.restype = ctypes.c_char_p
                 row['configurations'][config_symbol] = get_config().decode()
+        if not row['getters']:
+            row['serial_reference'] = reference_blas_threads(path)
         result.append(row)
     return result
 

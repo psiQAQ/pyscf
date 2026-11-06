@@ -123,7 +123,9 @@ def main():
                 assert not attempt['skipped'] and not attempt['failures'] and not attempt['errors']
                 assert attempt['source_sha'] == CONFIG['science_sha']
                 assert attempt['openmp_threads'] == 4
-                assert attempt['thread_queries'] and all(item['getters'] for item in attempt['thread_queries'])
+                assert attempt['thread_queries']
+                for item in attempt['thread_queries']:
+                    assert item['getters'] or item.get('serial_reference', {}).get('num_threads') == 1
                 if suite in ['rks', 'uks']:
                     assert len(attempt['gradient_cases']) == 9
             results.append({'suite': suite, 'attempts': count, 'result': 'Passed'})
