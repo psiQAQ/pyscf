@@ -34,7 +34,7 @@ jobs:
       - name: Set task directory on the runner
         shell: pwsh
         run: |
-          $sgxRunRoot = Join-Path $env:RUNNER_TEMP "sgx-$env:GITHUB_SHA-$env:RUNNER_OS"
+          $sgxRunRoot = Join-Path $env:GITHUB_WORKSPACE "validation/tmp/sgx-$env:GITHUB_SHA-$env:RUNNER_OS"
           "SGX_RUN_ROOT=$sgxRunRoot" >> $env:GITHUB_ENV
 
       - uses: actions/checkout@v7
@@ -49,6 +49,7 @@ jobs:
           $config = Get-Content validation/.github/workflows/sgx_validation/config.json -Raw | ConvertFrom-Json
           "sha=$($config.science_sha)" >> $env:GITHUB_OUTPUT
           "label=$($config.topic)-$($config.stage)" >> $env:GITHUB_OUTPUT
+          "stage=$($config.stage)" >> $env:GITHUB_OUTPUT
 
       - uses: actions/checkout@v7
         with:
@@ -127,4 +128,13 @@ jobs:
           path: ${{ env.SGX_RUN_ROOT }}/evidence/**
           if-no-files-found: error
           include-hidden-files: true
+          retention-days: 90
+
+      - name: Retain the accepted wheel or a first-failure wheel
+        if: always() && runner.os == 'Windows' && (steps.candidate.outputs.stage == 'formal' || failure())
+        uses: actions/upload-artifact@v7
+        with:
+          name: sgx-wheel-${{ steps.candidate.outputs.label }}-${{ github.sha }}-py313-omp4
+          path: candidate/dist/pyscf-*.whl
+          if-no-files-found: warn
           retention-days: 90

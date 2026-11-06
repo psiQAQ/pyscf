@@ -213,7 +213,6 @@ def main():
     if not 1 <= args.attempts <= 200:
         parser.error('attempts must be between 1 and 200')
     args.output.mkdir(parents=True, exist_ok=False)
-    (args.output / 'validate-source.py').write_bytes(Path(__file__).read_bytes())
     config = args.output / 'empty_config.py'
     config.write_text('# No user configuration.\n', encoding='utf-8')
     ext_paths = args.output / 'empty_ext_paths.txt'

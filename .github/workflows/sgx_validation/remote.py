@@ -4,7 +4,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 import time
@@ -38,6 +37,8 @@ def main():
     candidate = args.candidate.resolve()
     output = args.output.resolve()
     evidence = output / 'evidence'
+    assert output.is_relative_to(VALIDATION / 'tmp')
+    assert not output.is_relative_to(candidate)
     if args.phase == 'prepare':
         output.mkdir(parents=True, exist_ok=False)
         evidence.mkdir()
@@ -59,8 +60,6 @@ def main():
                     'tool_files': {str(p.relative_to(HERE)): sha256(p) for p in sorted(HERE.glob('*')) if p.is_file()},
                     'workflow_sha256': sha256(HERE.parent / 'sgx-validation.yml')}
         write_json(evidence / 'provenance.json', metadata)
-        shutil.copytree(HERE, evidence / 'tools')
-        shutil.copy2(HERE.parent / 'sgx-validation.yml', evidence / 'sgx-validation.yml')
         return 0
 
     assert evidence.is_dir()
@@ -90,9 +89,6 @@ def main():
             wheels = list((candidate / 'dist').glob('pyscf-*.whl'))
             assert len(wheels) == 1, wheels
             wheel = wheels[0]
-            wheel_out = evidence / 'wheel'
-            wheel_out.mkdir()
-            shutil.copy2(wheel, wheel_out / wheel.name)
             write_json(evidence / 'wheel.json', {'name': wheel.name, 'sha256': sha256(wheel),
                        'size': wheel.stat().st_size, 'science_sha': CONFIG['science_sha']})
             venv = output / '.venv'
