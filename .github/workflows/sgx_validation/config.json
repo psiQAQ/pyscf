@@ -1,0 +1,11 @@
+{
+  "science_sha": "8fb56ebf9ecd400bb1d6188c485d7153c78330d4",
+  "topic": "forwarding",
+  "stage": "formal",
+  "windows_attempts": 1,
+  "linux_attempts": 1,
+  "suites": [
+    "forwarding",
+    "sgx"
+  ]
+}
