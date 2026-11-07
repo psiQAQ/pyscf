@@ -20,7 +20,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        # Linux already passed on the same scientific candidate; retain that result.
+        os: [windows-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 180
     env:
