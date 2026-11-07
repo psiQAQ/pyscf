@@ -252,7 +252,8 @@ class KnownValues(unittest.TestCase):
         self.assertAlmostEqual(abs(mf1.mo_coeff-mo).max(), 0, 9)
 
     def test_rhf_pcm_stability(self):
-        with StringIO() as output:
+        # Eigenvalues parsed from the log need more precision than display defaults.
+        with StringIO() as output, numpy.printoptions(precision=12):
             mol = gto.M(
                 atom = """
                     H 0 0 0
@@ -308,7 +309,8 @@ class KnownValues(unittest.TestCase):
         assert test_stable_e is False
 
     def test_uhf_pcm_stability(self):
-        with StringIO() as output:
+        # Restore the caller's print options after capturing the eigenvalues.
+        with StringIO() as output, numpy.printoptions(precision=12):
             mol = gto.M(
                 atom = """
                     C 0 0 0
