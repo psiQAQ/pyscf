@@ -68,17 +68,27 @@ def main():
     commands = []
 
     def run(label, command, cwd=output):
+        started = time.monotonic()
+        print('[sgx] START %s' % label, flush=True)
         row = {'label': label, 'command': list(map(str, command)), 'cwd': str(cwd),
                'started_unix': time.time()}
         with (evidence / (label + '.stdout.log')).open('wb') as stdout, \
                 (evidence / (label + '.stderr.log')).open('wb') as stderr:
-            proc = subprocess.Popen(row['command'], cwd=cwd, stdout=stdout, stderr=stderr)
+            proc = subprocess.Popen(row['command'], cwd=cwd, stdout=subprocess.PIPE, stderr=stderr)
             row['pid'] = proc.pid
             commands.append(row)
             write_json(evidence / 'commands.json', commands)
+            with proc.stdout:
+                for line in proc.stdout:
+                    stdout.write(line)
+                    stdout.flush()
+                    print(line.decode('utf-8', errors='replace').rstrip('\r\n'), flush=True)
             row['exit_code'] = proc.wait()
         row['finished_unix'] = time.time()
+        row['elapsed_seconds'] = time.monotonic() - started
         write_json(evidence / 'commands.json', commands)
+        print('[sgx] END %s exit=%s elapsed=%.1fs' %
+              (label, row['exit_code'], row['elapsed_seconds']), flush=True)
         if row['exit_code']:
             raise RuntimeError('%s failed with exit code %s; original logs retained' % (label, row['exit_code']))
 
@@ -112,7 +122,7 @@ def main():
             expected_tests = {'lifecycle': 4, 'forwarding': 4, 'rks': 1, 'uks': 1, 'sgx': 8}[suite]
             count = repeats if suite == 'rks' else 1
             result_dir = evidence / suite
-            run('tests-' + suite, [python, '-I', '-B', HERE / 'validate.py', '--test-root', candidate,
+            run('tests-' + suite, [python, '-I', '-B', '-u', HERE / 'validate.py', '--test-root', candidate,
                 '--source-sha', CONFIG['science_sha'], '--suite', suite, '--attempts', str(count),
                 '--output', result_dir] + source_args)
             summary = json.loads((result_dir / 'summary.json').read_text())

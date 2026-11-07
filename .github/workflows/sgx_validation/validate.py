@@ -256,6 +256,8 @@ def main():
     report = {'pid': os.getpid(), 'source_sha': args.source_sha, 'suite': args.suite,
               'requested_attempts': args.attempts, 'tool_sha256': digest(__file__),
               'started_at_utc': now(), 'attempts': []}
+    batch_started = time.monotonic()
+    passed = failed = 0
     for number in range(1, args.attempts + 1):
         out = args.output / ('attempt-%04d' % number)
         out.mkdir()
@@ -265,18 +267,39 @@ def main():
         for name in ['source', 'native_lib']:
             if getattr(args, name):
                 command.extend(['--' + name.replace('_', '-'), str(getattr(args, name))])
+        attempt_started = time.monotonic()
         with (out / 'stdout.log').open('wb') as stdout, (out / 'stderr.log').open('wb') as stderr:
             proc = subprocess.Popen(command, cwd=out, env=env, stdout=stdout, stderr=stderr)
             row = {'attempt': number, 'pid': proc.pid, 'command': command, 'started_at_utc': now()}
             write_json(out / 'process.json', row)
-            code = proc.wait()
+            print('[sgx] %s START %d/%d pid=%d completed=%d/%d total=%.1fs' %
+                  (args.suite, number, args.attempts, proc.pid, number - 1, args.attempts,
+                   time.monotonic() - batch_started), flush=True)
+            while True:
+                try:
+                    code = proc.wait(timeout=30)
+                    break
+                except subprocess.TimeoutExpired:
+                    print('[sgx] %s WAIT %d/%d pid=%d elapsed=%.1fs total=%.1fs passed=%d failed=%d' %
+                          (args.suite, number, args.attempts, proc.pid,
+                           time.monotonic() - attempt_started, time.monotonic() - batch_started,
+                           passed, failed), flush=True)
         detail = json.loads((out / 'result.json').read_text()) if (out / 'result.json').exists() else {'result': 'Missing'}
-        row.update(exit_code=code, result=detail['result'], finished_at_utc=now())
+        row.update(exit_code=code, result=detail['result'], finished_at_utc=now(),
+                   elapsed_seconds=time.monotonic() - attempt_started)
+        if not code and detail['result'] == 'Passed':
+            passed += 1
+        else:
+            failed += 1
         report['attempts'].append(row)
         report['result'] = 'Passed' if not code and number == args.attempts else ('Failed' if code else 'Running')
         report['finished_at_utc'] = now()
+        report.update(elapsed_seconds=time.monotonic() - batch_started, passed=passed, failed=failed)
         write_json(args.output / 'summary.json', report)
         print(json.dumps({key: row[key] for key in ['attempt', 'pid', 'exit_code', 'result']}), flush=True)
+        print('[sgx] %s DONE %d/%d result=%s exit=%d elapsed=%.1fs total=%.1fs passed=%d failed=%d' %
+              (args.suite, number, args.attempts, row['result'], code, row['elapsed_seconds'],
+               report['elapsed_seconds'], passed, failed), flush=True)
         if code:
             return code
     return 0
