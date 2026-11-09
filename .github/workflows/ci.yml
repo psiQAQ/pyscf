@@ -67,8 +67,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
-        python-version: ["3.9", "3.12"]
+        include:
+          # Python 3.9 has no setup-python build for newer Ubuntu releases.
+          - os: ubuntu-24.04
+            python-version: "3.9"
+          - os: ubuntu-latest
+            python-version: "3.12"
     steps:
       - uses: actions/checkout@v7
       - name: Set up Python ${{ matrix.python-version }}
@@ -82,7 +86,7 @@ jobs:
           # to codecov in the step below); all other legs run bare pytest.
           RUN_COVERAGE: ${{ matrix.python-version == '3.9' }}
       - name: Upload to codecov
-        if: matrix.python-version == '3.9' && matrix.os == 'ubuntu-latest'
+        if: matrix.python-version == '3.9'
         uses: codecov/codecov-action@v7
         with:
           token: ${{secrets.CODECOV_TOKEN}}
