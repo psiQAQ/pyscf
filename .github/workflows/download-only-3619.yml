@@ -1,0 +1,46 @@
+name: PR 3619 download-only validation
+on:
+  push:
+    branches: [ci/verify-linux-download-20261111]
+permissions:
+  contents: read
+jobs:
+  download:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: 391e8860d2363a0063b942f686e3ca83886b9fac
+          persist-credentials: false
+      - name: Download and inspect archive only
+        shell: bash
+        run: |
+          set -e -o pipefail
+          test "$(git rev-parse HEAD)" = 391e8860d2363a0063b942f686e3ca83886b9fac
+          printf 'SOURCE_HEAD=%s\n' "$(git rev-parse HEAD)"
+          curl --version
+          python - <<'PY'
+          from pathlib import Path
+          source = Path('.github/workflows/ci_linux/build_pyscf.sh').read_text()
+          marker = 'tar xzf deps.tar.gz\n'
+          assert source.count(marker) == 1
+          prefix = source.split(marker, 1)[0]
+          assert '--fail --location --retry 3 --output deps.tar.gz' in prefix
+          assert 'cmake' not in prefix and 'make -j' not in prefix
+          Path('download-prefix.sh').write_text(prefix)
+          print('EXACT_DOWNLOAD_PREFIX_BEGIN\n' + prefix + 'EXACT_DOWNLOAD_PREFIX_END')
+          PY
+          bash download-prefix.sh
+          archive=pyscf/lib/deps.tar.gz
+          printf 'DOWNLOAD_BYTES=%s\n' "$(stat -c %s "$archive")"
+          gzip -t "$archive"
+          tar tzf "$archive" > archive-entries.txt
+          printf 'ARCHIVE_ENTRIES=%s\n' "$(wc -l < archive-entries.txt)"
+          test -s archive-entries.txt
+          rm -f "$archive" download-prefix.sh archive-entries.txt
+          echo DOWNLOAD_AND_ARCHIVE_CHECK_PASSED
