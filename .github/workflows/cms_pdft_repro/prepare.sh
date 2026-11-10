@@ -25,14 +25,16 @@ bash .github/workflows/ci_linux/deps_apt.sh
 gcc --version
 cmake --version
 dpkg-query -W 'libblas*' 'liblapack*' 'libgomp*' 'libgfortran*'
-if [[ "${CMS_PHASE:-repeat}" == matrix ]]; then
+if [[ "${CMS_PHASE:-repeat}" != repeat ]]; then
   gh run download "$CMS_NATIVE_RUN" --repo "$GITHUB_REPOSITORY" \
     --name "cms-native-$CMS_NATIVE_RUN-1" --dir "$root/tmp/native-download"
   gh run download "$CMS_NATIVE_RUN" --repo "$GITHUB_REPOSITORY" \
     --name "cms-evidence-$CMS_NATIVE_RUN-1" --dir "$root/tmp/prior-evidence"
   cp "$root/tmp/native-download/cms-native.tar.gz" "$root/tmp/cms-native.tar.gz"
   tar xzf "$root/tmp/cms-native.tar.gz"
-  tar xzf "$root/tmp/cms-native.tar.gz" -C "$root/tmp/cms-baseline"
+  if [[ -d "$root/tmp/cms-baseline" ]]; then
+    tar xzf "$root/tmp/cms-native.tar.gz" -C "$root/tmp/cms-baseline"
+  fi
 else
   bash .github/workflows/ci_linux/build_pyscf.sh
   tar czf "$root/tmp/cms-native.tar.gz" --exclude='*.c' --exclude='*.h' --exclude='*.f' \

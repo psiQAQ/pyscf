@@ -33,7 +33,14 @@ the existing CMS and PDFT methods with the original nudge and a diagnostic
 replacement for fresh end-to-end regression runs. Initial objective,
 gradient and Hessian differences against the capture are reported.
 
-Pushes affecting this directory or its workflow currently select `matrix`.
+The `fix` phase checks out the explicitly pinned scientific fix from the fork,
+reuses the archived libraries, and selects the captured Haswell dispatch. It
+runs 200 original-nodeid invocations, five per OpenMP/xdist combination, all
+three neighboring test files at one and two OpenMP threads, and all captured
+failed CMS entries plus one passing entry with the fixed source's default.
+The scientific fix must be published only after the user's separate approval.
+
+Pushes affecting this directory or its workflow currently select `fix`.
 The workflow also defines a `phase` dispatch input, defaulting to `repeat`;
 GitHub requires a workflow definition on the default branch before manual
 dispatch is available. This diagnostic does not modify the default branch.

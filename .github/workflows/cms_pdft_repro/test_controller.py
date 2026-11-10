@@ -54,6 +54,15 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(len(rows), 5)
         self.assertTrue(all('-n' not in cmd for cmd in self.commands))
 
+    def test_neighbor_paths_are_passed_as_separate_arguments(self):
+        paths = ['first.py', 'second.py']
+        with patch.dict(os.environ, CMS_PRIMARY_COUNT='1', CMS_CONTROLS='0',
+                        CMS_TEST_PATHS=json.dumps(paths)):
+            code, rows = self.run_scenario(None)
+        self.assertEqual(code, 0)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(self.commands[0][-2:], paths)
+
 
 if __name__ == '__main__':
     unittest.main()

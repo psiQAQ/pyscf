@@ -7,7 +7,7 @@ on:
     inputs:
       phase:
         type: choice
-        options: [repeat, matrix]
+        options: [repeat, matrix, fix]
         default: repeat
 permissions:
   contents: read
@@ -24,14 +24,14 @@ jobs:
       OPENBLAS_THREAD_TIMEOUT: '4'
       OMP_WAIT_POLICY: passive
       PYTHONDONTWRITEBYTECODE: '1'
-      CMS_PHASE: ${{ inputs.phase || 'matrix' }}
+      CMS_PHASE: ${{ inputs.phase || 'fix' }}
       CMS_NATIVE_RUN: '42846911445'
     steps:
       - uses: actions/checkout@v7
       - uses: actions/checkout@v7
         with:
-          repository: pyscf/pyscf
-          ref: 5dac8cd7e2175562ea70f01a4fb3a93a308fe265
+          repository: ${{ env.CMS_PHASE == 'fix' && github.repository || 'pyscf/pyscf' }}
+          ref: ${{ env.CMS_PHASE == 'fix' && 'da557003fd3a3cc9f84dec43d83fc80def177b89' || '5dac8cd7e2175562ea70f01a4fb3a93a308fe265' }}
           path: tmp/cms-source
       - uses: actions/checkout@v7
         if: env.CMS_PHASE == 'matrix'
@@ -51,7 +51,9 @@ jobs:
         shell: bash
         run: |
           ulimit -s 20000
-          if [[ "$CMS_PHASE" == matrix ]]; then
+          if [[ "$CMS_PHASE" == fix ]]; then
+            python .github/workflows/cms_pdft_repro/validate_fix.py
+          elif [[ "$CMS_PHASE" == matrix ]]; then
             python .github/workflows/cms_pdft_repro/compare.py
           else
             python .github/workflows/cms_pdft_repro/run.py

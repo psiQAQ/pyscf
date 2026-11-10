@@ -40,6 +40,7 @@ def main():
     count = int(os.environ.get('CMS_PRIMARY_COUNT', '200'))
     workers = int(os.environ.get('CMS_WORKERS', '2'))
     controls = os.environ.get('CMS_CONTROLS', '1') == '1'
+    targets = json.loads(os.environ.get('CMS_TEST_PATHS', json.dumps([NODE])))
     deadline = time.monotonic() + 120 * 60
     rows = []
     env = os.environ.copy()
@@ -78,8 +79,9 @@ def main():
         traces = list(dest.glob('trace-*.json'))
         trace_data = [json.loads(p.read_text()) for p in traces]
         captured = any(t.get('final') for t in trace_data)
-        converged = all(all(t.get(s, {}).get('converged', False)
-                            for s in ('rhf', 'casscf', 'cms')) for t in trace_data)
+        converged = (all(all(t.get(s, {}).get('converged', False)
+                             for s in ('rhf', 'casscf', 'cms')) for t in trace_data)
+                     if trace_data else None)
         ok = code == 0 and not timed_out and (not instrument or (captured and converged))
         rows.append(dict(label=label, exit_code=code, timed_out=timed_out,
                          captured=captured, converged=converged, passed=ok))
@@ -89,7 +91,7 @@ def main():
         return not (instrument and not traces and code != 0 and not timed_out)
 
     for i in range(count):
-        if not run(f'isolated-{i:03d}', [NODE]):
+        if not run(f'isolated-{i:03d}', targets):
             break
     primary_ok = len(rows) == count and all(r['passed'] for r in rows)
     if not controls:
