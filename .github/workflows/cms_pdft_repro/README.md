@@ -19,6 +19,13 @@ installed at the pinned versions on the remote runner only. System library
 packages and loaded paths are recorded; the historical runner image cannot
 be reconstructed by this workflow.
 
+The matrix now explicitly selects `OPENBLAS_CORETYPE=Haswell` to match the
+dispatch observed in the original 200-run capture. The first matrix run
+(`42850220899`) used automatic dispatch and reported SkylakeX instead;
+those results are retained separately. The repeat phase remains unchanged.
+This selects an OpenBLAS kernel, not its thread count; see the
+[OpenBLAS runtime-variable documentation](https://www.openmathlib.org/OpenBLAS/docs/runtime_variables/).
+
 After each source matrix, `replay.py` restores the captured CMS entry orbitals
 and CI vectors for every failed sample and one successful sample. It calls
 the existing CMS and PDFT methods with the original nudge and a diagnostic

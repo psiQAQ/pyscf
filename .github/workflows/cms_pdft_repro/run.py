@@ -51,7 +51,7 @@ def main():
     env['PYSCF_CONFIG_FILE'] = str(config)
     env['PYSCF_EXT_PATH'] = 'disabled-for-cms-diagnostic'
     identity = {k: env.get(k) for k in ('GITHUB_SHA', 'GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT',
-                                      'ImageOS', 'ImageVersion', 'OMP_NUM_THREADS')}
+                                      'ImageOS', 'ImageVersion', 'OMP_NUM_THREADS', 'OPENBLAS_CORETYPE')}
     identity['source_sha'] = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=SOURCE, text=True).strip()
     identity['controller_pid'] = os.getpid()
     (OUT / 'identity.json').write_text(json.dumps(identity, indent=2))

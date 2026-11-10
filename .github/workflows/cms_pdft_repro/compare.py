@@ -18,7 +18,7 @@ def main():
                 env = dict(os.environ, CMS_SOURCE=str(ROOT / 'tmp' / source),
                            CMS_OUT=str(OUT / label), CMS_PRIMARY_COUNT='5',
                            CMS_WORKERS=str(workers), CMS_CONTROLS='0',
-                           OMP_NUM_THREADS=str(threads))
+                           OMP_NUM_THREADS=str(threads), OPENBLAS_CORETYPE='Haswell')
                 proc = subprocess.Popen([sys.executable, str(Path(__file__).with_name('run.py'))], env=env)
                 print(f'controller {label}: PID {proc.pid}', flush=True)
                 code = proc.wait()
