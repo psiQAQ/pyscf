@@ -27,11 +27,14 @@ for row in selected:
     with np.load(next(case.glob('arrays-*.npz'))) as data:
         mo = data['casscf_final_mo'].copy()
         initial_ci = data['cms_initial_ci'].copy()
-    for nudge in (None, 1e-3):
+    for nudge in ((None,) if os.environ.get('CMS_REPLAY_FIXED') == '1' else (None, 1e-3)):
         label = f"{row['label']}-{'default' if nudge is None else 'nudge-1e-3'}"
         mol = gto.M(atom='H 0 0 0; H 1.3 0 0', basis='6-31G',
                     verbose=5, output=str(out / (label + '.log')))
         mf = scf.RHF(mol)
+        # RHF caches these integrals in the original test. Preserve the same
+        # in-core AO2MO route rather than recomputing through the Mole route.
+        mf._eri = mol.intor('int2e', aosym='s8')
         mc = mcpdft.CASSCF(mf, 'ftLDA,VWN3', 2, 2, grids_attr=original_test.my_grids)
         mc = mc.multi_state([1/3] * 3, 'cms')
         mc.fix_spin_(ss=0, shift=1)
@@ -58,3 +61,7 @@ for row in selected:
         (out / 'replay.json').write_text(json.dumps(result, indent=2) + '\n')
         print(json.dumps(entry), flush=True)
         mol.stdout.close()
+if os.environ.get('CMS_REPLAY_FIXED') == '1':
+    assert len(result['cases']) == len(selected)
+    assert all(c['converged'] and all(round(e, 4) == 0 for e in c['errors'])
+               for c in result['cases']), 'Fixed-source replay did not satisfy original criteria'

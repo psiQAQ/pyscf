@@ -118,10 +118,14 @@ def pytest_runtest_call(item):
             self.callback = callback
 
     def diabatize(self, *args, **kwargs):
-        snapshot('cms_initial', ci=kwargs.get('ci', self.ci))
+        snapshot('cms_initial', ci=kwargs.get('ci', self.ci), ao_eri=self._scf._eri)
         objective = self.diabatizer
         def observe_objective(*a, **kw):
             f, g, h, update = objective(*a, **kw)
+            closure = dict(zip(update.__code__.co_freevars,
+                               (cell.cell_contents for cell in (update.__closure__ or ()))))
+            if 'w0' in closure:
+                snapshot('cms_objective', tensor=closure['w0'])
             record['cms_iterations'].append(dict(objective=f, gradient=np.array(g), hessian=np.array(h)))
             save()
             def observe_update(u):
