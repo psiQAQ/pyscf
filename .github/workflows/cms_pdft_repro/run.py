@@ -67,7 +67,7 @@ def main():
                '--basetemp', str(scratch / 'pytest'), '-p', 'no:cacheprovider',
                '--junitxml', str(dest / 'junit.xml')]
         if instrument:
-            cmd += ['-p', 'capture']
+            cmd += ['-p', 'cms_capture']
         cmd += paths
         code, timed_out = execute(cmd, case_env, SOURCE, dest / 'pytest.log', min(timeout, remaining))
         traces = list(dest.glob('trace-*.json'))

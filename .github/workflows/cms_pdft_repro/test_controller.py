@@ -19,7 +19,7 @@ class ControllerTests(unittest.TestCase):
             out = Path(directory)
             def execute(command, env, cwd, log, timeout):
                 dest = log.parent
-                if '-p' in command and 'capture' in command:
+                if '-p' in command and 'cms_capture' in command:
                     (dest / 'trace-test.json').write_text(json.dumps({
                         'final': {'energies': [0]}, 'rhf': {'converged': True},
                         'casscf': {'converged': True}, 'cms': {'converged': True}}))
