@@ -1,0 +1,75 @@
+name: PR 3624 Python 3.12 diagnosis
+on:
+  push:
+    branches: [ci/validate-arm64-standard-20261111]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  comparison:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - source: upstream
+            revision: 37bbf598cdb54e33568e0733b466878613ee5ffc
+          - source: candidate
+            revision: a7c79ee801fb06f88ffb9221b2f64e60ee963427
+    env:
+      OMP_NUM_THREADS: 1
+      PYTEST_JOBS: 4
+      TEST_PATHS: pyscf/pbc/tdscf/test/test_uks.py
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: harness
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ matrix.revision }}
+          path: source
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Verify source and build through its shared scripts
+        id: build
+        working-directory: source
+        run: |
+          test "$(git rev-parse HEAD)" = '${{ matrix.revision }}'
+          ./.github/workflows/ci_linux/deps_apt.sh
+          ./.github/workflows/ci_linux/python_deps.sh
+          ./.github/workflows/ci_linux/build_pyscf.sh
+      - name: Original test file through shared pytest
+        id: standard
+        continue-on-error: true
+        working-directory: source
+        run: ./.github/workflows/run_tests.sh -v --tb=long
+      - name: Three independent processes with diagnostic output
+        id: diagnostic
+        continue-on-error: true
+        working-directory: source
+        env:
+          DIAGNOSTIC_SOURCE: ${{ matrix.source }}
+        run: |
+          export PYTHONPATH="$PWD:${PYTHONPATH:-}"
+          export OPENBLAS_THREAD_TIMEOUT=4
+          export OMP_WAIT_POLICY=passive
+          status=0
+          for sample in 1 2 3; do
+            mkdir -p pyscftmpdir
+            export DIAGNOSTIC_SAMPLE="$sample"
+            python -u ../harness/.github/diagnostics/pr3624_uks.py || status=1
+            num_tmpfiles="$(ls -1 pyscftmpdir | wc -l)"
+            echo "DIAGNOSTIC_LEFTOVER_FILES=$num_tmpfiles"
+            test "$num_tmpfiles" -eq 0 || status=1
+            rm -rf pyscftmpdir
+          done
+          exit "$status"
+      - name: Preserve actual test outcomes
+        if: always()
+        run: |
+          echo 'build=${{ steps.build.outcome }} original=${{ steps.standard.outcome }} diagnostic=${{ steps.diagnostic.outcome }}'
+          test '${{ steps.build.outcome }}' = success
+          test '${{ steps.standard.outcome }}' = success
+          test '${{ steps.diagnostic.outcome }}' = success
