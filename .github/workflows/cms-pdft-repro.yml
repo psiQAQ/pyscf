@@ -1,0 +1,54 @@
+name: CMS-PDFT Linux diagnostic
+on:
+  push:
+    branches: [ci/cms-pdft-repro-20261110]
+    paths: ['.github/workflows/cms-pdft-repro.yml', '.github/workflows/cms_pdft_repro/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: cms-pdft-diagnostic-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  reproduce:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 150
+    env:
+      OMP_NUM_THREADS: '2'
+      OPENBLAS_THREAD_TIMEOUT: '4'
+      OMP_WAIT_POLICY: passive
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: pyscf/pyscf
+          ref: 5dac8cd7e2175562ea70f01a4fb3a93a308fe265
+          path: tmp/cms-source
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11.18'
+      - name: Prepare exact Python dependencies and native libraries
+        shell: bash
+        run: bash .github/workflows/cms_pdft_repro/prepare.sh
+      - name: Repeat and collect
+        shell: bash
+        run: |
+          ulimit -s 20000
+          python .github/workflows/cms_pdft_repro/run.py
+      - name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cms-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: tmp/cms-evidence
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload native runtime
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cms-native-${{ github.run_id }}-${{ github.run_attempt }}
+          path: tmp/cms-native.tar.gz
+          if-no-files-found: warn
+          retention-days: 14
