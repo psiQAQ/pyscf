@@ -1,0 +1,41 @@
+name: PR 3619 download route diagnostics
+on:
+  push:
+    branches: [ci/diagnose-linux-download-20261111]
+permissions:
+  contents: read
+jobs:
+  download:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Compare routes and preserve all attempts
+        env:
+          VALIDATION_SHA: ${{ github.sha }}
+        run: python3 .github/scripts/download-diagnostic-3619.py
+      - name: Upload download evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: download-routes-${{ matrix.os }}
+          path: download-evidence/
+          retention-days: 14
+          if-no-files-found: error
+      - name: Report download failures after preserving evidence
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          results = json.loads(Path('download-evidence/summary.json').read_text())
+          assert len(results) == 8, 'Incomplete diagnostic collection'
+          assert all(r['archive_check'] == 'Passed' for r in results), 'At least one download attempt failed; evidence retained'
+          PY
