@@ -1,0 +1,85 @@
+name: Ubuntu shared CI validation
+on:
+  push:
+    branches: [ci/validate-ubuntu-shared-20261111]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ubuntu-shared-validation-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  native:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04-arm
+            arch: aarch64
+            sample: 1
+          - os: ubuntu-24.04-arm
+            arch: aarch64
+            sample: 2
+          - os: ubuntu-24.04
+            arch: x86_64
+            sample: 1
+    env:
+      OMP_NUM_THREADS: 1
+      OPENBLAS_NUM_THREADS: 1
+      MKL_NUM_THREADS: 1
+      BLIS_NUM_THREADS: 1
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      - name: Verify candidate identity
+        run: |
+          test "$(git rev-parse HEAD^)" = f387306a2fc73d4c29ca9f7667a461adcac988e6
+          test "$(git diff --name-only HEAD^ HEAD)" = .github/workflows/ubuntu-shared-validation.yml
+          test "$(uname -m)" = "${{ matrix.arch }}"
+          uname -a
+          nproc
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.9"
+      - name: Install build and full suite
+        run: |
+          if [ "${{ matrix.arch }}" = "aarch64" ]; then
+            ./.github/workflows/run_ci.sh --ignore=pyscf/adc --ignore=pyscf/pbc/df --ignore=pyscf/pbc/cc -v
+          else
+            ./.github/workflows/run_ci.sh -v
+          fi
+      - name: Record execution environment
+        if: always()
+        run: |
+          python - <<'PY'
+          import importlib.metadata as metadata
+          import json, os, platform, sys
+          versions = {}
+          for name in ('numpy','scipy','h5py','pytest','pytest-xdist','pytest-cov','pytest-timeout','pyscf-dispersion','trexio'):
+              try:
+                  versions[name] = metadata.version(name)
+              except metadata.PackageNotFoundError:
+                  versions[name] = None
+          print(json.dumps(dict(python=sys.version, platform=platform.platform(), packages=versions,
+                                threads={key:os.environ.get(key) for key in ('OMP_NUM_THREADS','OPENBLAS_NUM_THREADS','MKL_NUM_THREADS','BLIS_NUM_THREADS')})))
+          from pyscf.dft import libxc, xcfun
+          print(json.dumps(dict(libxc=libxc.__version__, xcfun=xcfun.__version__)))
+          PY
+      - name: Shared coverage smoke
+        if: success() && matrix.sample == 1
+        env:
+          RUN_COVERAGE: "true"
+          PYTEST_JOBS: 2
+          TEST_PATHS: pyscf/lib/test/test_misc.py
+        run: |
+          ./.github/workflows/run_tests.sh -v
+          test -s coverage.xml
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          report = ET.parse('coverage.xml').getroot()
+          assert int(report.attrib['lines-covered']) > 0
+          print('Verified non-empty coverage report from the shared pytest entry')
+          PY
