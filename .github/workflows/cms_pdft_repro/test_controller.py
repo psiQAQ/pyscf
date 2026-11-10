@@ -1,6 +1,7 @@
 """Test orchestration with synthetic subprocess outcomes, not scientific results."""
 import importlib.util
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -13,11 +14,13 @@ spec.loader.exec_module(controller)
 
 class ControllerTests(unittest.TestCase):
     def run_scenario(self, failed):
+        self.commands = []
         scratch = controller.ROOT / 'tmp/controller-validation'
         scratch.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=scratch) as directory:
             out = Path(directory)
             def execute(command, env, cwd, log, timeout):
+                self.commands.append(command)
                 dest = log.parent
                 if '-p' in command and 'cms_capture' in command:
                     (dest / 'trace-test.json').write_text(json.dumps({
@@ -43,6 +46,13 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(len(rows), 224)
         self.assertEqual(len({r['label'] for r in rows}), 224)
         self.assertEqual(rows[-1]['label'], 'subset-000')
+
+    def test_serial_matrix_case_has_five_runs_without_xdist(self):
+        with patch.dict(os.environ, CMS_PRIMARY_COUNT='5', CMS_WORKERS='0', CMS_CONTROLS='0'):
+            code, rows = self.run_scenario('isolated-001')
+        self.assertEqual(code, 1)
+        self.assertEqual(len(rows), 5)
+        self.assertTrue(all('-n' not in cmd for cmd in self.commands))
 
 
 if __name__ == '__main__':

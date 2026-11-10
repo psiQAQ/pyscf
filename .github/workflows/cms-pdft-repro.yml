@@ -4,8 +4,14 @@ on:
     branches: [ci/cms-pdft-repro-20261110]
     paths: ['.github/workflows/cms-pdft-repro.yml', '.github/workflows/cms_pdft_repro/**']
   workflow_dispatch:
+    inputs:
+      phase:
+        type: choice
+        options: [repeat, matrix]
+        default: repeat
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: cms-pdft-diagnostic-${{ github.ref }}
   cancel-in-progress: false
@@ -18,6 +24,8 @@ jobs:
       OPENBLAS_THREAD_TIMEOUT: '4'
       OMP_WAIT_POLICY: passive
       PYTHONDONTWRITEBYTECODE: '1'
+      CMS_PHASE: ${{ inputs.phase || 'matrix' }}
+      CMS_NATIVE_RUN: '42846911445'
     steps:
       - uses: actions/checkout@v7
       - uses: actions/checkout@v7
@@ -25,17 +33,29 @@ jobs:
           repository: pyscf/pyscf
           ref: 5dac8cd7e2175562ea70f01a4fb3a93a308fe265
           path: tmp/cms-source
+      - uses: actions/checkout@v7
+        if: env.CMS_PHASE == 'matrix'
+        with:
+          repository: pyscf/pyscf
+          ref: 7cccd3c5ce0320851121f7fbef0b12ecba100441
+          path: tmp/cms-baseline
       - uses: actions/setup-python@v6
         with:
           python-version: '3.11.18'
       - name: Prepare exact Python dependencies and native libraries
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: bash .github/workflows/cms_pdft_repro/prepare.sh
       - name: Repeat and collect
         shell: bash
         run: |
           ulimit -s 20000
-          python .github/workflows/cms_pdft_repro/run.py
+          if [[ "$CMS_PHASE" == matrix ]]; then
+            python .github/workflows/cms_pdft_repro/compare.py
+          else
+            python .github/workflows/cms_pdft_repro/run.py
+          fi
       - name: Upload diagnostic evidence
         if: always()
         uses: actions/upload-artifact@v7

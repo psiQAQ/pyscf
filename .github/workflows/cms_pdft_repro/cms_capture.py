@@ -67,6 +67,11 @@ def pytest_runtest_call(item):
 
     def rhf(self, *args, **kwargs):
         callback = self.callback
+        original_guess = self.get_init_guess
+        def observe_guess(*a, **kw):
+            dm = original_guess(*a, **kw)
+            snapshot('rhf_initial', dm=dm)
+            return dm
         def observe(e):
             record['rhf_iterations'].append({k: e[k] for k in
                 ('cycle', 'e_tot', 'norm_gorb', 'norm_ddm') if k in e})
@@ -76,8 +81,10 @@ def pytest_runtest_call(item):
                 callback(e)
         self.callback = observe
         try:
-            ret = original_scf(self, *args, **kwargs)
-            record['rhf'] = dict(converged=bool(self.converged), energy=self.e_tot)
+            with patch.object(self, 'get_init_guess', observe_guess):
+                ret = original_scf(self, *args, **kwargs)
+            record['rhf'] = dict(converged=bool(self.converged), energy=self.e_tot,
+                                 conv_tol=self.conv_tol, conv_tol_grad=self.conv_tol_grad)
             snapshot('rhf_final', mo=self.mo_coeff, energies=self.mo_energy, occupations=self.mo_occ)
             return ret
         finally:
@@ -88,6 +95,12 @@ def pytest_runtest_call(item):
             ('conv_tol', 'conv_tol_sarot', 'conv_tol_diabatize', 'nudge_tol_diabatize', 'max_cyc_diabatize')}
         snapshot('casscf_initial', mo=self.mo_coeff, ci=kwargs.get('ci0'))
         callback = self.callback
+        original_fci = self.fcisolver.kernel
+        def observe_fci(*a, **kw):
+            ret = original_fci(*a, **kw)
+            if 'casscf_first_ci' not in arrays:
+                snapshot('casscf_first', ci=ret[1], energies=ret[0])
+            return ret
         def observe(e):
             record['casscf_iterations'].append({k: e[k] for k in
                 ('imacro', 'imicro', 'e_tot', 'de', 'norm_gorb', 'norm_gorb0', 'norm_gci') if k in e})
@@ -96,7 +109,8 @@ def pytest_runtest_call(item):
                 callback(e)
         self.callback = observe
         try:
-            ret = original_opt(self, *args, **kwargs)
+            with patch.object(self.fcisolver, 'kernel', observe_fci):
+                ret = original_opt(self, *args, **kwargs)
             record['casscf'] = dict(converged=bool(self.converged), energies=self.e_mcscf)
             snapshot('casscf_final', mo=self.mo_coeff, ci=self.ci)
             return ret

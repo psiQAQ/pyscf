@@ -8,8 +8,8 @@ import sys
 import time
 
 ROOT = Path(__file__).resolve().parents[3]
-SOURCE = ROOT / 'tmp/cms-source'
-OUT = ROOT / 'tmp/cms-evidence'
+SOURCE = Path(os.environ.get('CMS_SOURCE', ROOT / 'tmp/cms-source'))
+OUT = Path(os.environ.get('CMS_OUT', ROOT / 'tmp/cms-evidence'))
 NODE = 'pyscf/mcpdft/test/test_diatomic_energies.py::KnownValues::test_h2_cms3ftlda22_631g'
 SUBSET = ('agf2 ao2mo cc dft gto lib mcpdft mcscf mp scf tdscf '
           'pbc/df pbc/dft pbc/scf').split()
@@ -37,6 +37,9 @@ def execute(command, env, cwd, log, timeout):
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
+    count = int(os.environ.get('CMS_PRIMARY_COUNT', '200'))
+    workers = int(os.environ.get('CMS_WORKERS', '2'))
+    controls = os.environ.get('CMS_CONTROLS', '1') == '1'
     deadline = time.monotonic() + 120 * 60
     rows = []
     env = os.environ.copy()
@@ -63,9 +66,11 @@ def main():
         scratch.mkdir()
         case_env = dict(env, CMS_CASE_DIR=str(dest), TMPDIR=str(scratch), PYSCF_TMPDIR=str(scratch))
         cmd = [sys.executable, '-m', 'pytest', '-s', '-v', '-c', 'pytest.ini',
-               '--timeout=900', '-n', '2', '--dist', 'loadfile',
+               '--timeout=900',
                '--basetemp', str(scratch / 'pytest'), '-p', 'no:cacheprovider',
                '--junitxml', str(dest / 'junit.xml')]
+        if workers:
+            cmd += ['-n', str(workers), '--dist', 'loadfile']
         if instrument:
             cmd += ['-p', 'cms_capture']
         cmd += paths
@@ -83,10 +88,12 @@ def main():
         # Collection/plugin startup failures cannot supply numerical evidence.
         return not (instrument and not traces and code != 0 and not timed_out)
 
-    for i in range(200):
+    for i in range(count):
         if not run(f'isolated-{i:03d}', [NODE]):
             break
-    primary_ok = len(rows) == 200 and all(r['passed'] for r in rows)
+    primary_ok = len(rows) == count and all(r['passed'] for r in rows)
+    if not controls:
+        return 0 if primary_ok else 1
     # Observation-effect controls are separately counted.
     for i in range(3):
         if not run(f'uninstrumented-{i:03d}', [NODE], instrument=False):
@@ -96,9 +103,9 @@ def main():
             if not run(f'file-{i:03d}', [NODE.split('::')[0]]):
                 break
         run('subset-000', ['pyscf/' + p for p in SUBSET], timeout=2400)
-    complete = (sum(r['label'].startswith('isolated-') for r in rows) == 200
+    complete = (sum(r['label'].startswith('isolated-') for r in rows) == count
                 and sum(r['label'].startswith('uninstrumented-') for r in rows) == 3
-                and (not primary_ok or len(rows) == 224))
+                and (not primary_ok or len(rows) == count + 24))
     return 0 if complete and all(r['passed'] for r in rows) else 1
 
 
