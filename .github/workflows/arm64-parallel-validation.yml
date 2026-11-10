@@ -1,0 +1,33 @@
+name: ARM64 parallel validation
+on:
+  push:
+    branches: [ci/validate-arm64-parallel-20261110]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: arm64-parallel-validation-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  arm64:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [1, 2]
+    env:
+      PYSCF_CI_ARM64_IMAGE: quay.io/pypa/manylinux2014_aarch64
+      PYSCF_CI_PYTHON_ABI: cp39-cp39
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      - name: Verify candidate identity
+        run: |
+          test "$(git rev-parse HEAD^)" = 9c2c395f40f6fc5d6f5c91dd7c985509e5877739
+          test "$(git diff --name-only HEAD^ HEAD)" = .github/workflows/arm64-parallel-validation.yml
+          uname -m
+          nproc
+      - name: Build and test candidate
+        run: ./.github/workflows/run_ci.sh
