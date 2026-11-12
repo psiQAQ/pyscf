@@ -11,6 +11,8 @@ on:
     paths:
       - '.github/workflows/ucisd-repeat.yml'
       - '.github/workflows/ucisd_repeat/**'
+      - 'pyscf/lib/numpy_helper.py'
+      - 'pyscf/ci/ucisd.py'
   workflow_dispatch:
 
 permissions:
