@@ -1,0 +1,110 @@
+name: UCISD empty-spin repeat diagnostic
+
+# Measures how often pyscf/ci/test/test_ucisd.py::KnownValues::test_h4 fails in
+# the released wheel environment.  Two modes, selected by branch:
+#   * wheel   - released pyscf wheel as installed (unpatched): counts the flakes
+#   * overlay - same wheel, with the checkout's pure-Python files on top: shows
+#               whether the fix removes them
+on:
+  push:
+    branches: [ci/ucisd-repeat-20261113, codex/fix/ucisd-empty-spin-20261113]
+    paths:
+      - '.github/workflows/ucisd-repeat.yml'
+      - '.github/workflows/ucisd_repeat/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ucisd-repeat-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FIX_BRANCH: codex/fix/ucisd-empty-spin-20261113
+  REPEAT_COUNT: '300'
+  REPEAT_FILE_COUNT: '20'
+  PYSCF_VERSION: '2.15.0'
+  NUMPY_VERSION: '2.5.4'
+  PYTEST_VERSION: '8.4.2'
+  OMP_NUM_THREADS: '1'
+  OPENBLAS_NUM_THREADS: '1'
+  OPENBLAS_THREAD_TIMEOUT: '4'
+  OMP_WAIT_POLICY: passive
+  PYTHONDONTWRITEBYTECODE: '1'
+  PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 240
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13.17'
+      - name: Isolate task temporary directories
+        run: |
+          $scratch = Join-Path $env:RUNNER_TEMP 'ucisd-repeat-${{ github.sha }}-windows'
+          New-Item -ItemType Directory -Path $scratch | Out-Null
+          foreach ($name in @('TMP', 'TEMP', 'PYSCF_TMPDIR', 'PIP_CACHE_DIR')) {
+            "$name=$scratch" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          }
+      - name: Select source mode
+        shell: bash
+        run: |
+          if [ "${GITHUB_REF_NAME}" = "${FIX_BRANCH}" ]; then
+            echo "UCISD_MODE=overlay" >> "$GITHUB_ENV"
+          else
+            echo "UCISD_MODE=wheel" >> "$GITHUB_ENV"
+          fi
+      - name: Prepare installed-wheel environment
+        run: python -B .github/workflows/ucisd_repeat/prepare.py
+      - name: Repeat and collect
+        run: python -B .github/workflows/ucisd_repeat/run.py
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ucisd-repeat-${{ github.run_id }}-windows
+          path: tmp/ucisd-repeat
+          if-no-files-found: error
+          retention-days: 14
+
+  linux:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13.17'
+      - name: Isolate task temporary directories
+        run: |
+          scratch="$RUNNER_TEMP/ucisd-repeat-${{ github.sha }}-linux"
+          mkdir -p "$scratch"
+          for name in TMP TEMP TMPDIR PYSCF_TMPDIR PIP_CACHE_DIR; do
+            printf '%s=%s\n' "$name" "$scratch" >> "$GITHUB_ENV"
+          done
+      - name: Select source mode
+        run: |
+          if [ "${GITHUB_REF_NAME}" = "${FIX_BRANCH}" ]; then
+            echo "UCISD_MODE=overlay" >> "$GITHUB_ENV"
+          else
+            echo "UCISD_MODE=wheel" >> "$GITHUB_ENV"
+          fi
+      - name: Prepare installed-wheel environment
+        run: python -B .github/workflows/ucisd_repeat/prepare.py
+      - name: Repeat and collect
+        run: python -B .github/workflows/ucisd_repeat/run.py
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ucisd-repeat-${{ github.run_id }}-linux
+          path: tmp/ucisd-repeat
+          if-no-files-found: error
+          retention-days: 14
